@@ -68,14 +68,6 @@ struct NativeNavigationFloatingTabStyle {
     let badgeTextColor: UIColor
 }
 
-/// `UIColor.tintColor` is iOS 15+. The deployment target is 14.0 so the default
-/// accent has to be resolved at runtime.
-func nativeNavigationDefaultTintColor() -> UIColor {
-    if #available(iOS 15.0, *) {
-        return .tintColor
-    }
-    return .systemBlue
-}
 
 // MARK: - Background geometry
 
