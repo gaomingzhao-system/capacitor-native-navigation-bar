@@ -8,6 +8,9 @@ much of the viewport they cover (as an event and as CSS variables), and can play
 a native transition over a snapshot of the WebView while JavaScript swaps the
 route underneath.
 
+> 🇯🇵 [日本語 README](./README.ja.md)
+
+
 ## Supported versions
 
 |                                 | Minimum | Verified against                        |
