@@ -1,17 +1,12 @@
 # capacitor-native-navigation-bar
 
-Native navbar, tabbar, safe-area reporting and WebView snapshot transitions for
-Capacitor apps — **on Capacitor 7 as well as Capacitor 8+**.
+Native navbar, tabbar, safe-area reporting, and WebView snapshot transitions for
+Capacitor apps — supports **Capacitor 7 and Capacitor 8+** from a single package.
 
 The plugin renders real UIKit / Android views on top of the WebView, reports how
 much of the viewport they cover (as an event and as CSS variables), and can play
 a native transition over a snapshot of the WebView while JavaScript swaps the
 route underneath.
-
-This is a port of [`@capgo/capacitor-native-navigation`][upstream] (MPL-2.0) with
-the compatibility work needed to make it installable and correct on Capacitor 7.
-See [COMPATIBILITY.md](./COMPATIBILITY.md) for the full list of changes and the
-evidence behind each one.
 
 ## Supported versions
 
@@ -50,11 +45,9 @@ pnpm and bun work too; the Capacitor CLI discovers the plugin through
 
 - JDK 21 (the same JDK Capacitor 7 and 8 require).
 - Nothing to configure: the module reads `compileSdkVersion`, `minSdkVersion`
-  and `targetSdkVersion` from the app's `variables.gradle`, falling back to
-  Capacitor 7's values when built standalone.
+  and `targetSdkVersion` from the app's `variables.gradle`.
 - `load()` calls `Window.setDecorFitsSystemWindows(false)` so the native bars can
-  draw into the system bar areas. This is inherited from upstream and applies to
-  the whole activity.
+  draw into the system bar areas. This applies to the whole activity.
 
 ## Usage
 
@@ -142,7 +135,7 @@ Events: `navbarBack`, `navbarItemTap`, `tabSelect`, `safeAreaChanged`,
 Full option and event types live in
 [`src/definitions.ts`](./src/definitions.ts) and ship as `dist/esm/index.d.ts`.
 
-## Platform behaviour
+## Platform behavior
 
 - **iOS 26+** uses the system Liquid Glass `UITabBarController` for floating tab
   bars, and `UIGlassEffect` for the custom capsule. Earlier iOS falls back to
@@ -153,22 +146,7 @@ Full option and event types live in
 - Icons accept inline SVG (rendered natively on both platforms), SF Symbols and
   bundled image/drawable names.
 
-## Differences from the upstream Capgo plugin
-
-Migration is an import-path change; the bridge name (`NativeNavigation`), method
-names, option shapes, return types and event names are unchanged.
-
-```diff
-- import { NativeNavigation } from '@capgo/capacitor-native-navigation'
-+ import { NativeNavigation } from 'capacitor-native-navigation-bar'
-```
-
-Because both packages register the same `NativeNavigation` bridge name, do not
-install them side by side.
-
-Everything else — the lowered platform floors, the fixed defects, the tooling
-swap and the two deliberate behaviour preservations — is documented in
-[COMPATIBILITY.md](./COMPATIBILITY.md).
+See [PLATFORM.md](./PLATFORM.md) for the full platform and OS-feature support matrix.
 
 ## Development
 
@@ -186,8 +164,4 @@ runs the Swift unit tests.
 
 ## License
 
-MPL-2.0, inherited from the upstream project. See [LICENSE](./LICENSE) and
-[NOTICE](./NOTICE) — every derived source file keeps the MPL Exhibit A header and
-the attribution to Capgo.
-
-[upstream]: https://github.com/Cap-go/capacitor-native-navigation
+MPL-2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
