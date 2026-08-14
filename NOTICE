@@ -1,0 +1,22 @@
+capacitor-native-navigation-bar
+===============================
+
+This product is a derivative work of:
+
+    @capgo/capacitor-native-navigation
+    https://github.com/Cap-go/capacitor-native-navigation
+    Copyright (c) Capgo — Martin Donadieu <martin@capgo.app>
+    Licensed under the Mozilla Public License, v. 2.0
+
+Portions of the TypeScript, Swift and Java sources in this repository are
+copied from, or derived from, that project. Those files remain subject to the
+Mozilla Public License, v. 2.0 and carry the MPL Exhibit A notice at the top of
+the file. A copy of the license is included in this repository as `LICENSE`;
+you can also obtain one at https://mozilla.org/MPL/2.0/.
+
+Modifications made in this repository (Capacitor 7 compatibility work, defect
+fixes, build/tooling changes and documentation) are likewise licensed under the
+Mozilla Public License, v. 2.0.
+
+This project is not affiliated with, endorsed by, or supported by Capgo or the
+Ionic team.

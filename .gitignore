@@ -1,0 +1,30 @@
+# node
+node_modules
+dist
+*.tgz
+
+# iOS
+Pods
+Podfile.lock
+Package.resolved
+.build
+.swiftpm
+DerivedData
+build
+xcuserdata
+
+# Android
+.gradle
+local.properties
+*.iml
+captures
+.externalNativeBuild
+.cxx
+
+# tooling caches
+.tsdown
+*.tsbuildinfo
+coverage
+
+# macOS
+.DS_Store

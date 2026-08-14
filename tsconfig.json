@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    /*
+     * ES2017 is deliberate, not legacy: Capacitor's minimum supported Android
+     * System WebView is version 55 (Bridge.MINIMUM_ANDROID_WEBVIEW_VERSION, the
+     * same in Capacitor 7 and 8), which predates optional chaining and nullish
+     * coalescing. Emitting ES2017 keeps those constructs downleveled.
+     */
+    "target": "ES2017",
+    "lib": ["DOM", "DOM.Iterable", "ES2017"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "declaration": true,
+    "sourceMap": true,
+    "inlineSources": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowUnreachableCode": false,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.mjs", "*.config.ts"]
+}

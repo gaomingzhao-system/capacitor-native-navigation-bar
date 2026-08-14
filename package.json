@@ -1,0 +1,103 @@
+{
+  "name": "capacitor-native-navigation-bar",
+  "version": "1.0.0",
+  "description": "Capacitor plugin for native navbar, tabbar, safe-area handling, and WebView snapshot transitions. Supports Capacitor 7 and newer.",
+  "keywords": [
+    "capacitor",
+    "capacitor-plugin",
+    "liquid-glass",
+    "native-navigation",
+    "navbar",
+    "safe-area",
+    "tabbar"
+  ],
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/example/capacitor-native-navigation-bar.git"
+  },
+  "files": [
+    "android/build.gradle",
+    "android/proguard-rules.pro",
+    "android/src/main/",
+    "dist/",
+    "ios/Sources",
+    "ios/Tests",
+    "CapacitorNativeNavigationBar.podspec",
+    "Package.swift",
+    "LICENSE",
+    "NOTICE",
+    "COMPATIBILITY.md"
+  ],
+  "type": "module",
+  "main": "dist/plugin.cjs",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "unpkg": "dist/plugin.js",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/plugin.d.cts",
+        "default": "./dist/plugin.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "pnpm run clean && tsdown",
+    "typecheck": "pnpm run typecheck:cap7 && pnpm run typecheck:cap8",
+    "lint": "pnpm run lint:fmt && pnpm run lint:js && pnpm run typecheck && pnpm run check:wiring",
+    "lint:js": "oxlint --deny-warnings",
+    "lint:fmt": "oxfmt --check .",
+    "fmt": "oxfmt . && oxlint --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "pnpm run verify:web && pnpm run verify:ios && pnpm run verify:android",
+    "verify:web": "pnpm run lint && pnpm run test && pnpm run build && pnpm run check:package",
+    "verify:ios": "xcodebuild -scheme CapacitorNativeNavigationBar -destination generic/platform=iOS build",
+    "verify:ios:test": "xcodebuild test -scheme CapacitorNativeNavigationBar -destination 'platform=iOS Simulator,name=iPhone 17 Pro'",
+    "verify:android": "cd android && ./gradlew clean build test",
+    "check:wiring": "node scripts/check-wiring.mjs",
+    "prepublishOnly": "pnpm run build",
+    "typecheck:cap7": "tsc --noEmit -p tsconfig.json",
+    "typecheck:cap8": "tsc --noEmit -p tsconfig.cap8.json",
+    "check:package": "publint --strict && attw --pack ."
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/core-v8": "npm:@capacitor/core@^8.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@types/node": "^24.10.1",
+    "happy-dom": "^20.0.10",
+    "oxfmt": "^0.63.0",
+    "oxlint": "^1.78.0",
+    "publint": "^0.3.23",
+    "rimraf": "^6.1.3",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=7.0.0 <10.0.0"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "packageManager": "pnpm@11.9.0",
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  }
+}

@@ -1,0 +1,83 @@
+ext {
+    junitVersion = project.hasProperty('junitVersion') ? rootProject.ext.junitVersion : '4.13.2'
+    androidxAppCompatVersion = project.hasProperty('androidxAppCompatVersion') ? rootProject.ext.androidxAppCompatVersion : '1.7.0'
+    androidxCoreVersion = project.hasProperty('androidxCoreVersion') ? rootProject.ext.androidxCoreVersion : '1.13.1'
+    androidxJunitVersion = project.hasProperty('androidxJunitVersion') ? rootProject.ext.androidxJunitVersion : '1.2.1'
+    androidxEspressoCoreVersion = project.hasProperty('androidxEspressoCoreVersion') ? rootProject.ext.androidxEspressoCoreVersion : '3.6.1'
+    // Only used when this module is built on its own (`cd android && ./gradlew build`).
+    // Inside an app the app's own buildscript classpath wins, which is what keeps
+    // this library usable from Capacitor 7 (AGP 8.7.x) and Capacitor 8 (AGP 8.13.x).
+    standaloneAgpVersion = project.hasProperty('androidGradlePluginVersion') ? rootProject.ext.androidGradlePluginVersion : '8.7.2'
+}
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:${project.hasProperty('androidGradlePluginVersion') ? rootProject.ext.androidGradlePluginVersion : '8.7.2'}"
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace = "app.nativenavigationbar.capacitor"
+    // Follow the host app: Capacitor 7 apps expose 35, Capacitor 8 apps expose 36.
+    // The fallback is 35 so a standalone build works with the AGP pinned above.
+    compileSdk = project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 35
+    defaultConfig {
+        // 23 is Capacitor 7's minSdk (android/capacitor/build.gradle at tag 7.x).
+        // Declaring 24 here — as upstream does — makes the manifest merger fail in
+        // any Capacitor 7 app that kept the default, so the floor stays at 23 and
+        // everything newer is behind Build.VERSION.SDK_INT checks.
+        minSdkVersion project.hasProperty('minSdkVersion') ? rootProject.ext.minSdkVersion : 23
+        targetSdkVersion project.hasProperty('targetSdkVersion') ? rootProject.ext.targetSdkVersion : 35
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles 'proguard-rules.pro'
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    lint {
+        abortOnError = false
+    }
+    compileOptions {
+        // Capacitor 7 and 8 both compile capacitor-android with Java 21 and both
+        // require a JDK 21 toolchain, so 17 here is simply a lower, compatible
+        // bytecode floor that also lets the module build on a JDK 17 toolchain.
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+        }
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation project(':capacitor-android')
+    annotationProcessor project(':capacitor-android')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    // androidx.core.graphics.PathParser (used by the SVG icon renderer) is public
+    // API from core 1.7.0 onward; declare it explicitly instead of relying on the
+    // version appcompat happens to pull in.
+    implementation "androidx.core:core:$androidxCoreVersion"
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+}
