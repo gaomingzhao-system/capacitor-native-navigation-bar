@@ -10,9 +10,7 @@ import type {
 import { NativeNavigation } from "./registry";
 
 const parseBoolean = (value: string | null, defaultValue = false): boolean => {
-  if (value === null) {
-    return defaultValue;
-  }
+  if (value === null) return defaultValue;
   return value === "" || value === "true" || value === "1";
 };
 
@@ -24,10 +22,7 @@ const typedAttribute = <T extends string>(element: Element, name: string): T | u
 
 const parseJsonAttribute = <T>(element: Element, name: string, fallback: T): T => {
   const value = element.getAttribute(name);
-  if (!value) {
-    return fallback;
-  }
-
+  if (!value) return fallback;
   try {
     return JSON.parse(value) as T;
   } catch {
@@ -36,9 +31,7 @@ const parseJsonAttribute = <T>(element: Element, name: string, fallback: T): T =
 };
 
 export function defineNativeNavigationElements(): void {
-  if (typeof customElements === "undefined" || typeof HTMLElement === "undefined") {
-    return;
-  }
+  if (typeof customElements === "undefined" || typeof HTMLElement === "undefined") return;
 
   /*
    * Attribute changes arrive one callback per attribute. Setting several
@@ -58,15 +51,11 @@ export function defineNativeNavigationElements(): void {
     }
 
     attributeChangedCallback(): void {
-      if (this.isConnected) {
-        this.requestSync();
-      }
+      if (this.isConnected) this.requestSync();
     }
 
     private requestSync(): void {
-      if (this.syncQueued) {
-        return;
-      }
+      if (this.syncQueued) return;
       this.syncQueued = true;
       this.syncTail = this.syncAfter(this.syncTail);
     }
@@ -76,9 +65,7 @@ export function defineNativeNavigationElements(): void {
       // Attributes are read only after yielding, so every write made in the
       // same task collapses into this one update.
       this.syncQueued = false;
-      if (!this.isConnected) {
-        return;
-      }
+      if (!this.isConnected) return;
       try {
         await this.applyState();
       } catch {
@@ -125,11 +112,7 @@ export function defineNativeNavigationElements(): void {
           undefined as NativeNavigationConfigureOptions["glass"],
         ),
       };
-
-      if (duration) {
-        options.animationDuration = Number(duration);
-      }
-
+      if (duration) options.animationDuration = Number(duration);
       return NativeNavigation.configure(options);
     }
   }
@@ -182,7 +165,6 @@ export function defineNativeNavigationElements(): void {
         ),
         animated: parseBoolean(this.getAttribute("animated")),
       };
-
       return NativeNavigation.setNavbar(options);
     }
   }
@@ -243,18 +225,14 @@ export function defineNativeNavigationElements(): void {
         badgeTextColor: normalizeAttribute(this.getAttribute("badge-text-color")),
         animated: parseBoolean(this.getAttribute("animated")),
       };
-
       return NativeNavigation.setTabbar(options);
     }
   }
 
-  if (!customElements.get("cap-native-navigation-provider")) {
+  if (!customElements.get("cap-native-navigation-provider"))
     customElements.define("cap-native-navigation-provider", CapNativeNavigationProvider);
-  }
-  if (!customElements.get("cap-native-navbar")) {
+  if (!customElements.get("cap-native-navbar"))
     customElements.define("cap-native-navbar", CapNativeNavbar);
-  }
-  if (!customElements.get("cap-native-tabbar")) {
+  if (!customElements.get("cap-native-tabbar"))
     customElements.define("cap-native-tabbar", CapNativeTabbar);
-  }
 }

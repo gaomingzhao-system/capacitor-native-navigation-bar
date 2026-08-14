@@ -4,19 +4,13 @@
 
 import type { PluginListenerHandle } from "@capacitor/core";
 
-/**
- * Platform rendering preference for the native bars.
- */
+/** Platform rendering preference for the native bars. */
 export type NativeNavigationPlatformStyle = "auto" | "ios" | "android";
 
-/**
- * How the plugin exposes native bar sizes to web content.
- */
+/** How the plugin exposes native bar sizes to web content. */
 export type NativeNavigationContentInsetMode = "css" | "none";
 
-/**
- * Navigation animation direction.
- */
+/** Navigation animation direction. */
 export type NativeNavigationTransitionDirection =
   | "forward"
   | "back"
@@ -25,9 +19,7 @@ export type NativeNavigationTransitionDirection =
   | "zoom"
   | "none";
 
-/**
- * Native material/blur effect preference.
- */
+/** Native material/blur effect preference. */
 export type NativeNavigationBlurEffect =
   | "none"
   | "systemDefault"
@@ -52,14 +44,10 @@ export type NativeNavigationBlurEffect =
   | "systemThickMaterialDark"
   | "systemChromeMaterialDark";
 
-/**
- * Native glass background rendering preference.
- */
+/** Native glass background rendering preference. */
 export type NativeNavigationGlassEffect = "none" | "liquidGlass";
 
-/**
- * Native glass background configuration.
- */
+/** Native glass background configuration. */
 export interface NativeNavigationGlassOptions {
   /**
    * `liquidGlass` enables the Android 12+ live blurred WebView backdrop for
@@ -69,9 +57,7 @@ export interface NativeNavigationGlassOptions {
    */
   effect?: NativeNavigationGlassEffect;
 
-  /**
-   * Android blur radius in native dp for `liquidGlass`. Defaults to `18`.
-   */
+  /** Android blur radius in native dp for `liquidGlass`. Defaults to `18`. */
   blurRadius?: number;
 
   /**
@@ -81,14 +67,10 @@ export interface NativeNavigationGlassOptions {
   surfaceAlpha?: number;
 }
 
-/**
- * Native tab label visibility behavior.
- */
+/** Native tab label visibility behavior. */
 export type NativeNavigationTabLabelVisibilityMode = "auto" | "selected" | "labeled" | "unlabeled";
 
-/**
- * A rectangle in WebView viewport coordinates, expressed in native points/dp.
- */
+/** A rectangle in WebView viewport coordinates, expressed in native points/dp. */
 export interface NativeNavigationRect {
   x: number;
   y: number;
@@ -96,9 +78,7 @@ export interface NativeNavigationRect {
   height: number;
 }
 
-/**
- * Native tabbar background shape.
- */
+/** Native tabbar background shape. */
 export type NativeNavigationTabbarShape = "floating" | "curve";
 
 /**
@@ -117,9 +97,7 @@ export type NativeNavigationTabRole = "normal" | "search" | "prominent";
  * because icons are rendered by native UI.
  */
 export interface NativeNavigationIcon {
-  /**
-   * Cross-platform asset path or URL fallback.
-   */
+  /** Cross-platform asset path or URL fallback. */
   src?: string;
 
   /**
@@ -130,14 +108,10 @@ export interface NativeNavigationIcon {
    */
   svg?: string;
 
-  /**
-   * Preferred rendered icon width in native points/dp. Defaults to `24`.
-   */
+  /** Preferred rendered icon width in native points/dp. Defaults to `24`. */
   width?: number;
 
-  /**
-   * Preferred rendered icon height in native points/dp. Defaults to `24`.
-   */
+  /** Preferred rendered icon height in native points/dp. Defaults to `24`. */
   height?: number;
 
   /**
@@ -146,50 +120,32 @@ export interface NativeNavigationIcon {
    */
   template?: boolean;
 
-  /**
-   * iOS-specific SF Symbol, bundled image name, or inline SVG.
-   */
+  /** iOS-specific SF Symbol, bundled image name, or inline SVG. */
   ios?: {
-    /**
-     * SF Symbol name, for example `house.fill`.
-     */
+    /** SF Symbol name, for example `house.fill`. */
     sfSymbol?: string;
 
-    /**
-     * Bundled image name from the app asset catalog.
-     */
+    /** Bundled image name from the app asset catalog. */
     image?: string;
 
-    /**
-     * iOS-specific inline SVG markup.
-     */
+    /** iOS-specific inline SVG markup. */
     svg?: string;
   };
 
-  /**
-   * Android-specific drawable resource, asset name, or inline SVG.
-   */
+  /** Android-specific drawable resource, asset name, or inline SVG. */
   android?: {
-    /**
-     * Drawable resource name without the `R.drawable.` prefix.
-     */
+    /** Drawable resource name without the `R.drawable.` prefix. */
     resource?: string;
 
-    /**
-     * Bundled image asset name.
-     */
+    /** Bundled image asset name. */
     image?: string;
 
-    /**
-     * Android-specific inline SVG markup.
-     */
+    /** Android-specific inline SVG markup. */
     svg?: string;
   };
 }
 
-/**
- * Native bar colors. Use CSS-style hex strings (`#RRGGBB` or `#AARRGGBB`).
- */
+/** Native bar colors. Use CSS-style hex strings (`#RRGGBB` or `#AARRGGBB`). */
 export interface NativeNavigationColors {
   /**
    * When `true`, Android 12+ derives unspecified bar colors from Material You
@@ -197,9 +153,7 @@ export interface NativeNavigationColors {
    */
   dynamic?: boolean;
 
-  /**
-   * Tint color for active buttons/items.
-   */
+  /** Tint color for active buttons/items. */
   tint?: string;
 
   /**
@@ -214,134 +168,82 @@ export interface NativeNavigationColors {
    */
   background?: string;
 
-  /**
-   * Title and label text color where the native platform supports it.
-   */
+  /** Title and label text color where the native platform supports it. */
   foreground?: string;
 
-  /**
-   * Badge background color for native tab badges.
-   */
+  /** Badge background color for native tab badges. */
   badgeBackground?: string;
 
-  /**
-   * Badge text color for native tab badges.
-   */
+  /** Badge text color for native tab badges. */
   badgeText?: string;
 
-  /**
-   * Active tab indicator color on Android.
-   */
+  /** Active tab indicator color on Android. */
   indicator?: string;
 
-  /**
-   * Tab press ripple color on Android.
-   */
+  /** Tab press ripple color on Android. */
   ripple?: string;
 }
 
-/**
- * Global plugin configuration.
- */
+/** Global plugin configuration. */
 export interface NativeNavigationConfigureOptions {
-  /**
-   * Enables or disables the native chrome host.
-   */
+  /** Enables or disables the native chrome host. */
   enabled?: boolean;
 
-  /**
-   * Native style preference. `auto` uses the current platform.
-   */
+  /** Native style preference. `auto` uses the current platform. */
   platformStyle?: NativeNavigationPlatformStyle;
 
-  /**
-   * When `css`, the plugin writes CSS variables on `document.documentElement`.
-   */
+  /** When `css`, the plugin writes CSS variables on `document.documentElement`. */
   contentInsetMode?: NativeNavigationContentInsetMode;
 
-  /**
-   * Default native transition duration in milliseconds.
-   */
+  /** Default native transition duration in milliseconds. */
   animationDuration?: number;
 
-  /**
-   * Shared color hints for native bars.
-   */
+  /** Shared color hints for native bars. */
   colors?: NativeNavigationColors;
 
-  /**
-   * Shared glass background defaults for native bars.
-   */
+  /** Shared glass background defaults for native bars. */
   glass?: NativeNavigationGlassOptions;
 }
 
-/**
- * A button shown in the native navbar.
- */
+/** A button shown in the native navbar. */
 export interface NativeNavigationBarButton {
-  /**
-   * Stable id returned in `navbarItemTap`.
-   */
+  /** Stable id returned in `navbarItemTap`. */
   id: string;
 
-  /**
-   * Visible text label.
-   */
+  /** Visible text label. */
   title?: string;
 
-  /**
-   * Native icon descriptor.
-   */
+  /** Native icon descriptor. */
   icon?: NativeNavigationIcon;
 
-  /**
-   * Whether the action is enabled. Defaults to `true`.
-   */
+  /** Whether the action is enabled. Defaults to `true`. */
   enabled?: boolean;
 }
 
-/**
- * Native back button configuration.
- */
+/** Native back button configuration. */
 export interface NativeNavigationBackButton {
-  /**
-   * Show the native back affordance.
-   */
+  /** Show the native back affordance. */
   visible?: boolean;
 
-  /**
-   * Optional back title.
-   */
+  /** Optional back title. */
   title?: string;
 }
 
-/**
- * Native navbar state.
- */
+/** Native navbar state. */
 export interface NativeNavigationNavbarOptions {
-  /**
-   * Hide the native navbar.
-   */
+  /** Hide the native navbar. */
   hidden?: boolean;
 
-  /**
-   * Main title.
-   */
+  /** Main title. */
   title?: string;
 
-  /**
-   * Secondary title where supported by the platform.
-   */
+  /** Secondary title where supported by the platform. */
   subtitle?: string;
 
-  /**
-   * Prefer a large iOS title style.
-   */
+  /** Prefer a large iOS title style. */
   large?: boolean;
 
-  /**
-   * Prefer transparent/scroll-edge style.
-   */
+  /** Prefer transparent/scroll-edge style. */
   transparent?: boolean;
 
   /**
@@ -356,54 +258,34 @@ export interface NativeNavigationNavbarOptions {
    */
   glass?: NativeNavigationGlassOptions;
 
-  /**
-   * Back button state.
-   */
+  /** Back button state. */
   backButton?: NativeNavigationBackButton;
 
-  /**
-   * Left-side action buttons.
-   */
+  /** Left-side action buttons. */
   leftItems?: NativeNavigationBarButton[];
 
-  /**
-   * Right-side action buttons.
-   */
+  /** Right-side action buttons. */
   rightItems?: NativeNavigationBarButton[];
 
-  /**
-   * Navbar color hints.
-   */
+  /** Navbar color hints. */
   colors?: NativeNavigationColors;
 
-  /**
-   * Animate native navbar changes.
-   */
+  /** Animate native navbar changes. */
   animated?: boolean;
 }
 
-/**
- * A native tab item.
- */
+/** A native tab item. */
 export interface NativeNavigationTab {
-  /**
-   * Stable tab id returned in `tabSelect`.
-   */
+  /** Stable tab id returned in `tabSelect`. */
   id: string;
 
-  /**
-   * Visible tab label.
-   */
+  /** Visible tab label. */
   title?: string;
 
-  /**
-   * Native icon descriptor.
-   */
+  /** Native icon descriptor. */
   icon?: NativeNavigationIcon;
 
-  /**
-   * Optional selected-state icon.
-   */
+  /** Optional selected-state icon. */
   selectedIcon?: NativeNavigationIcon;
 
   /**
@@ -412,9 +294,7 @@ export interface NativeNavigationTab {
    */
   badge?: string | number;
 
-  /**
-   * Whether the tab is enabled. Defaults to `true`.
-   */
+  /** Whether the tab is enabled. Defaults to `true`. */
   enabled?: boolean;
 
   /**
@@ -436,9 +316,7 @@ export interface NativeNavigationTab {
   role?: NativeNavigationTabRole;
 }
 
-/**
- * Native tabbar layout and background shape options.
- */
+/** Native tabbar layout and background shape options. */
 export interface NativeNavigationTabbarStyle {
   /**
    * `floating` keeps the capsule tabbar. On iOS 26+ this uses the
@@ -485,9 +363,7 @@ export interface NativeNavigationTabbarStyle {
    */
   centerItemId?: string;
 
-  /**
-   * Included center button diameter in native points/dp. Defaults to `56`.
-   */
+  /** Included center button diameter in native points/dp. Defaults to `56`. */
   centerButtonDiameter?: number;
 
   /**
@@ -496,54 +372,34 @@ export interface NativeNavigationTabbarStyle {
    */
   centerButtonLift?: number;
 
-  /**
-   * Included center button color. Defaults to the active tint color.
-   */
+  /** Included center button color. Defaults to the active tint color. */
   centerButtonColor?: string;
 
-  /**
-   * Included center button icon color. Defaults to white.
-   */
+  /** Included center button icon color. Defaults to white. */
   centerButtonIconColor?: string;
 }
 
-/**
- * Native tabbar state.
- */
+/** Native tabbar state. */
 export interface NativeNavigationTabbarOptions {
-  /**
-   * Hide the native tabbar.
-   */
+  /** Hide the native tabbar. */
   hidden?: boolean;
 
-  /**
-   * Tab definitions.
-   */
+  /** Tab definitions. */
   tabs?: NativeNavigationTab[];
 
-  /**
-   * Currently selected tab id.
-   */
+  /** Currently selected tab id. */
   selectedId?: string;
 
-  /**
-   * Show text labels. Defaults to `true`.
-   */
+  /** Show text labels. Defaults to `true`. */
   labels?: boolean;
 
-  /**
-   * Native label visibility mode. Overrides `labels` when provided.
-   */
+  /** Native label visibility mode. Overrides `labels` when provided. */
   labelVisibilityMode?: NativeNavigationTabLabelVisibilityMode;
 
-  /**
-   * Show icons. Defaults to `true`.
-   */
+  /** Show icons. Defaults to `true`. */
   icons?: boolean;
 
-  /**
-   * Tabbar color hints.
-   */
+  /** Tabbar color hints. */
   colors?: NativeNavigationColors;
 
   /**
@@ -572,46 +428,29 @@ export interface NativeNavigationTabbarOptions {
    */
   disableTransparentOnScrollEdge?: boolean;
 
-  /**
-   * Disable the Android active tab indicator.
-   */
+  /** Disable the Android active tab indicator. */
   disableIndicator?: boolean;
 
-  /**
-   * Active tab indicator color on Android. `colors.indicator` is also
-   * supported.
-   */
+  /** Active tab indicator color on Android. `colors.indicator` is also supported. */
   indicatorColor?: string;
 
-  /**
-   * Tab press ripple color on Android. `colors.ripple` is also supported.
-   */
+  /** Tab press ripple color on Android. `colors.ripple` is also supported. */
   rippleColor?: string;
 
-  /**
-   * Badge background color. `colors.badgeBackground` is also supported.
-   */
+  /** Badge background color. `colors.badgeBackground` is also supported. */
   badgeBackgroundColor?: string;
 
-  /**
-   * Badge text color. `colors.badgeText` is also supported.
-   */
+  /** Badge text color. `colors.badgeText` is also supported. */
   badgeTextColor?: string;
 
-  /**
-   * Optional native tabbar layout and shape customization.
-   */
+  /** Optional native tabbar layout and shape customization. */
   style?: NativeNavigationTabbarStyle;
 
-  /**
-   * Animate native tabbar changes.
-   */
+  /** Animate native tabbar changes. */
   animated?: boolean;
 }
 
-/**
- * Insets exposed to web content.
- */
+/** Insets exposed to web content. */
 export interface NativeNavigationInsets {
   top: number;
   right: number;
@@ -621,72 +460,48 @@ export interface NativeNavigationInsets {
   tabbarHeight: number;
 }
 
-/**
- * Returned by methods that may change safe content bounds.
- */
+/** Returned by methods that may change safe content bounds. */
 export interface NativeNavigationInsetsResult {
   insets: NativeNavigationInsets;
 }
 
-/**
- * Begin a native transition transaction before JS changes route content.
- */
+/** Begin a native transition transaction before JS changes route content. */
 export interface NativeNavigationBeginTransitionOptions {
   id?: string;
   direction?: NativeNavigationTransitionDirection;
   duration?: number;
-  /**
-   * Source rectangle for `zoom` transitions. Use viewport coordinates such as
-   * those returned by `Element.getBoundingClientRect()`.
-   */
+  /** Source rectangle for `zoom` transitions. Use viewport coordinates such as
+   * those returned by `Element.getBoundingClientRect()`. */
   sourceRect?: NativeNavigationRect;
-  /**
-   * Destination rectangle for shared-element-style `zoom` transitions.
-   */
+  /** Destination rectangle for shared-element-style `zoom` transitions. */
   targetRect?: NativeNavigationRect;
-  /**
-   * Corner radius used while animating a `zoom` transition.
-   */
+  /** Corner radius used while animating a `zoom` transition. */
   cornerRadius?: number;
 }
 
-/**
- * Finish a native transition transaction after JS has changed route content.
- */
+/** Finish a native transition transaction after JS has changed route content. */
 export interface NativeNavigationFinishTransitionOptions {
   id?: string;
   direction?: NativeNavigationTransitionDirection;
   duration?: number;
-  /**
-   * Source rectangle for `zoom` transitions when no active source was recorded.
-   */
+  /** Source rectangle for `zoom` transitions when no active source was recorded. */
   sourceRect?: NativeNavigationRect;
-  /**
-   * Destination rectangle for shared-element-style `zoom` transitions.
-   */
+  /** Destination rectangle for shared-element-style `zoom` transitions. */
   targetRect?: NativeNavigationRect;
-  /**
-   * Corner radius used while animating a `zoom` transition.
-   */
+  /** Corner radius used while animating a `zoom` transition. */
   cornerRadius?: number;
 }
 
-/**
- * Native transition result.
- */
+/** Native transition result. */
 export interface NativeNavigationTransitionResult {
   id: string;
   direction: NativeNavigationTransitionDirection;
   duration: number;
 }
 
-/**
- * Plugin version payload.
- */
+/** Plugin version payload. */
 export interface PluginVersionResult {
-  /**
-   * Version identifier returned by the platform implementation.
-   */
+  /** Version identifier returned by the platform implementation. */
   version: string;
 }
 
@@ -716,42 +531,28 @@ export interface NativeNavigationTransitionEvent {
   duration: number;
 }
 
-/**
- * Framework-agnostic native navigation chrome API.
- */
+/** Framework-agnostic native navigation chrome API. */
 export interface NativeNavigationPlugin {
-  /**
-   * Configure the native chrome host and content inset behavior.
-   */
+  /** Configure the native chrome host and content inset behavior. */
   configure(options?: NativeNavigationConfigureOptions): Promise<NativeNavigationInsetsResult>;
 
-  /**
-   * Render or update the native navbar.
-   */
+  /** Render or update the native navbar. */
   setNavbar(options: NativeNavigationNavbarOptions): Promise<NativeNavigationInsetsResult>;
 
-  /**
-   * Render or update the native tabbar.
-   */
+  /** Render or update the native tabbar. */
   setTabbar(options: NativeNavigationTabbarOptions): Promise<NativeNavigationInsetsResult>;
 
-  /**
-   * Capture the current WebView and prepare a native transition.
-   */
+  /** Capture the current WebView and prepare a native transition. */
   beginTransition(
     options?: NativeNavigationBeginTransitionOptions,
   ): Promise<NativeNavigationTransitionResult>;
 
-  /**
-   * Animate from the captured WebView snapshot to the current live WebView.
-   */
+  /** Animate from the captured WebView snapshot to the current live WebView. */
   finishTransition(
     options?: NativeNavigationFinishTransitionOptions,
   ): Promise<NativeNavigationTransitionResult>;
 
-  /**
-   * Returns the platform implementation version marker.
-   */
+  /** Returns the platform implementation version marker. */
   getPluginVersion(): Promise<PluginVersionResult>;
 
   addListener(

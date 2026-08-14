@@ -38,14 +38,8 @@ export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPl
     this.config = {
       ...this.config,
       ...options,
-      colors: {
-        ...this.config.colors,
-        ...options.colors,
-      },
-      glass: {
-        ...this.config.glass,
-        ...options.glass,
-      },
+      colors: { ...this.config.colors, ...options.colors },
+      glass: { ...this.config.glass, ...options.glass },
     };
     return this.applyInsets();
   }
@@ -54,14 +48,8 @@ export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPl
     this.navbar = {
       ...this.navbar,
       ...options,
-      colors: {
-        ...this.navbar.colors,
-        ...options.colors,
-      },
-      glass: {
-        ...this.navbar.glass,
-        ...options.glass,
-      },
+      colors: { ...this.navbar.colors, ...options.colors },
+      glass: { ...this.navbar.glass, ...options.glass },
     };
     return this.applyInsets();
   }
@@ -70,18 +58,9 @@ export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPl
     this.tabbar = {
       ...this.tabbar,
       ...options,
-      colors: {
-        ...this.tabbar.colors,
-        ...options.colors,
-      },
-      style: {
-        ...this.tabbar.style,
-        ...options.style,
-      },
-      glass: {
-        ...this.tabbar.glass,
-        ...options.glass,
-      },
+      colors: { ...this.tabbar.colors, ...options.colors },
+      style: { ...this.tabbar.style, ...options.style },
+      glass: { ...this.tabbar.glass, ...options.glass },
     };
     return this.applyInsets();
   }
@@ -115,9 +94,7 @@ export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPl
   }
 
   async getPluginVersion(): Promise<PluginVersionResult> {
-    return {
-      version: "web",
-    };
+    return { version: "web" };
   }
 
   private createTransition(
@@ -130,9 +107,7 @@ export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPl
 
   private currentTabbarHeight(): number {
     const style = this.tabbar.style;
-    if (!style) {
-      return DEFAULT_TABBAR_HEIGHT;
-    }
+    if (!style) return DEFAULT_TABBAR_HEIGHT;
 
     const defaultHeight =
       style.shape === "curve" ? 76 : style.shape === "floating" ? 64 : DEFAULT_TABBAR_HEIGHT;
@@ -176,9 +151,7 @@ export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPl
   }
 
   private dispatchWindowEvent(name: string, detail: unknown): void {
-    if (typeof window === "undefined") {
-      return;
-    }
+    if (typeof window === "undefined") return;
     window.dispatchEvent(new CustomEvent(`capNativeNavigation:${name}`, { detail }));
   }
 }
