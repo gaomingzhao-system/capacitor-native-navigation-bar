@@ -22,6 +22,8 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.Menu;
@@ -105,6 +107,17 @@ public class NativeNavigationPlugin extends Plugin {
     private final List<NativeTabItem> tabItems = new ArrayList<>();
     private int selectedTabIndex = 0;
 
+    /*
+     * Safety net for a `beginTransition` that never gets a matching
+     * `finishTransition` (an app bug, an exception thrown between the two
+     * calls, or the process getting backgrounded mid-transition). Without this
+     * the WebView is left at alpha 0.01f — effectively invisible — until
+     * something else happens to reset it. Cancelled as soon as the transition
+     * finishes normally, and also fired immediately from `handleOnPause`.
+     */
+    private final Handler transitionWatchdogHandler = new Handler(Looper.getMainLooper());
+    private Runnable transitionWatchdogRunnable;
+
     private int lastRootWidth = -1;
     private int lastRootHeight = -1;
     private View observedRoot;
@@ -156,6 +169,19 @@ public class NativeNavigationPlugin extends Plugin {
     protected void handleOnDestroy() {
         runOnUiThread(this::teardownChrome);
         super.handleOnDestroy();
+    }
+
+    @Override
+    protected void handleOnPause() {
+        // If the app is backgrounded mid-transition, nothing the user is
+        // watching matters anymore, so force-complete it immediately rather
+        // than leaving the WebView at alpha 0.01f for whenever the activity
+        // happens to resume.
+        String id = activeTransitionId;
+        if (id != null) {
+            runOnUiThread(() -> recoverStuckTransition(id));
+        }
+        super.handleOnPause();
     }
 
     @PluginMethod
@@ -422,6 +448,7 @@ public class NativeNavigationPlugin extends Plugin {
             root.addView(transitionSnapshot, params);
             webView.setAlpha(0.01f);
             bringChromeToFront();
+            armTransitionWatchdog(activeTransitionId, activeTransitionMs);
 
             JSObject event = transitionEvent(activeTransitionId, activeTransitionDirection, activeTransitionMs);
             notifyListeners("transitionStart", event);
@@ -482,6 +509,7 @@ public class NativeNavigationPlugin extends Plugin {
             View snapshot = transitionSnapshot;
             JSObject event = transitionEvent(transitionId, direction, durationMs);
             Runnable finish = () -> {
+                cancelTransitionWatchdog();
                 removeTransitionSnapshot(contentRoot(), snapshot);
                 restoreTransitionRootBackground();
                 activeTransitionId = null;
@@ -519,6 +547,56 @@ public class NativeNavigationPlugin extends Plugin {
         call.resolve(ret);
     }
 
+    /**
+     * Schedules {@link #recoverStuckTransition} to force-complete {@code id} if
+     * {@link #cancelTransitionWatchdog} has not already run by then. The delay
+     * is generous (the requested duration plus a multi-second grace period) so
+     * it never fires during a legitimate, merely slow, transition.
+     */
+    private void armTransitionWatchdog(String id, int durationMs) {
+        cancelTransitionWatchdog();
+        long delayMs = Math.max(durationMs, defaultTransitionMs) + 4_000L;
+        transitionWatchdogRunnable = () -> recoverStuckTransition(id);
+        transitionWatchdogHandler.postDelayed(transitionWatchdogRunnable, delayMs);
+    }
+
+    private void cancelTransitionWatchdog() {
+        if (transitionWatchdogRunnable != null) {
+            transitionWatchdogHandler.removeCallbacks(transitionWatchdogRunnable);
+            transitionWatchdogRunnable = null;
+        }
+    }
+
+    /**
+     * Force-completes transition {@code id} if it is still the active one,
+     * restoring the WebView to a normal, visible state without requiring a
+     * matching {@code finishTransition} call. A no-op if {@code id} was already
+     * finished normally or superseded by a newer {@code beginTransition}.
+     */
+    private void recoverStuckTransition(String id) {
+        cancelTransitionWatchdog();
+        if (!id.equals(activeTransitionId)) {
+            return;
+        }
+        Bridge bridge = getBridge();
+        View webView = bridge == null ? null : bridge.getWebView();
+        String direction = activeTransitionDirection;
+        removeTransitionSnapshot(contentRoot(), null);
+        restoreTransitionRootBackground();
+        activeTransitionId = null;
+        activeZoomSourceFrame = null;
+        if (webView != null) {
+            webView.setTranslationX(0);
+            webView.setTranslationY(0);
+            webView.setScaleX(1f);
+            webView.setScaleY(1f);
+            webView.setAlpha(1f);
+            webView.setClipToOutline(false);
+            webView.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+        }
+        notifyListeners("transitionEnd", transitionEvent(id, direction, 0));
+    }
+
     private void finishZoomTransition(
         View webView,
         View snapshot,
@@ -535,6 +613,7 @@ public class NativeNavigationPlugin extends Plugin {
         }
         JSObject event = transitionEvent(transitionId, "zoom", durationMs);
         Runnable finish = () -> {
+            cancelTransitionWatchdog();
             removeTransitionSnapshot(contentRoot(), snapshot);
             restoreTransitionRootBackground();
             activeTransitionId = null;
@@ -646,8 +725,7 @@ public class NativeNavigationPlugin extends Plugin {
     }
 
     private void moveLastDetachedTrailingItemToEnd() {
-        // Plain index loops: List.removeIf / Stream are API 24+, and this library
-        // supports Capacitor 7 apps that still use its minSdk of 23.
+        // List.removeIf / Stream need API 24+, which is this library's floor.
         NativeTabItem trailingItem = null;
         for (int index = tabItems.size() - 1; index >= 0; index--) {
             if (tabItems.get(index).detachedTrailing) {
@@ -658,21 +736,12 @@ public class NativeNavigationPlugin extends Plugin {
         if (trailingItem == null) {
             return;
         }
-        for (int index = tabItems.size() - 1; index >= 0; index--) {
-            if (tabItems.get(index).detachedTrailing) {
-                tabItems.remove(index);
-            }
-        }
+        tabItems.removeIf((item) -> item.detachedTrailing);
         tabItems.add(trailingItem);
     }
 
     private boolean hasDetachedTrailingItem() {
-        for (int index = 0; index < tabItems.size(); index++) {
-            if (tabItems.get(index).detachedTrailing) {
-                return true;
-            }
-        }
-        return false;
+        return tabItems.stream().anyMatch((item) -> item.detachedTrailing);
     }
 
     private void addToolbarItems(Toolbar nativeToolbar, JSONArray rawItems, String placement) {
@@ -1462,13 +1531,12 @@ public class NativeNavigationPlugin extends Plugin {
     private JSObject currentInsets() {
         /*
          * Insets describe how much of the *WebView viewport* the native bars cover.
-         * Capacitor 8 always lays the WebView out edge to edge, but a Capacitor 7
-         * app can set `android.adjustMarginsForEdgeToEdge` to "auto"/"force", and
-         * CapacitorWebView.edgeToEdgeHandler() then margins the WebView by the
-         * system bar insets (that method does not exist in Capacitor 8). Measuring
-         * the chrome against the WebView's real position keeps a single code path
-         * correct in both cases; when the WebView is not offset — the default
-         * everywhere — these expressions reduce to the plain bar heights.
+         * A Capacitor 7 app can set `android.adjustMarginsForEdgeToEdge` to
+         * "auto"/"force", and CapacitorWebView.edgeToEdgeHandler() then margins the
+         * WebView by the system bar insets. Measuring the chrome against the
+         * WebView's real position keeps a single code path correct whether or not
+         * that margining is active; when the WebView is not offset — the default —
+         * these expressions reduce to the plain bar heights.
          */
         int webViewTop = webViewTopOffsetInRoot();
         int webViewBottomGap = webViewBottomGapInRoot();
@@ -1606,6 +1674,7 @@ public class NativeNavigationPlugin extends Plugin {
         // Also short-circuits any relayout already posted from the root listener.
         navbarVisible = false;
         tabbarVisible = false;
+        cancelTransitionWatchdog();
         if (observedRoot != null) {
             observedRoot.removeOnLayoutChangeListener(rootLayoutListener);
             observedRoot = null;
