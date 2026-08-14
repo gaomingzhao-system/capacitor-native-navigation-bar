@@ -1,11 +1,35 @@
 {
   "version": 1,
   "skills": {
+    "capacitor-best-practices": {
+      "source": "cap-go/capgo-skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-best-practices/SKILL.md",
+      "computedHash": "5070b60d829a8bfab87c5a51db0543174d1b9be4a990e305a9b56a06054770a3"
+    },
     "capacitor-plugins": {
-      "source": "cap-go/capacitor-skills",
+      "source": "cap-go/capgo-skills",
       "sourceType": "github",
       "skillPath": "skills/capacitor-plugins/SKILL.md",
       "computedHash": "562ff249ba5f53d4aae96373a2bc8ae21984b992062ac127cc809aa6358dc87f"
+    },
+    "capacitor-testing": {
+      "source": "cap-go/capgo-skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-testing/SKILL.md",
+      "computedHash": "d4ecb92a8a34ebc6975aca358dcbeb14363f41b9ba46e1a909bde373039e05f5"
+    },
+    "capacitor-uiscene-migrator": {
+      "source": "ionic-team/capacitor-skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-uiscene-migrator/SKILL.md",
+      "computedHash": "229b5b23456546c5e0cb1683d844f1f1d4fbc39ef5e40368d7ca44f941b660ec"
+    },
+    "debugging-capacitor": {
+      "source": "cap-go/capgo-skills",
+      "sourceType": "github",
+      "skillPath": "skills/debugging-capacitor/SKILL.md",
+      "computedHash": "e2782526d4fd891f40514575fffda70746b0be2480a077842bf7a44f357d6852"
     }
   }
 }
