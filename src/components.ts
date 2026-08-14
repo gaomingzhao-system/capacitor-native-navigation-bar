@@ -1,10 +1,6 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * Derived from @capgo/capacitor-native-navigation
- * (https://github.com/Cap-go/capacitor-native-navigation), Copyright (c) Capgo.
- * See NOTICE for details. */
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import type {
   NativeNavigationConfigureOptions,
@@ -45,10 +41,11 @@ export function defineNativeNavigationElements(): void {
   }
 
   /*
-   * Attribute changes arrive one callback per attribute, so setting five
-   * attributes in one task used to fire five native calls whose promises could
-   * settle out of order. Sync requests are coalesced into a single microtask and
-   * then serialized, so native sees one update per burst, in order.
+   * Attribute changes arrive one callback per attribute. Setting several
+   * attributes in the same task would otherwise fire one native call per
+   * attribute, with promises that can settle out of order. Syncs are coalesced
+   * into a single microtask and then serialized, so native sees one update per
+   * attribute burst, in order.
    */
   abstract class NativeNavigationElement extends HTMLElement {
     private syncQueued = false;
