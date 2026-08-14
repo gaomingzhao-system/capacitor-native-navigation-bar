@@ -46,7 +46,7 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "build": "pnpm run clean && tsdown",
+    "build": "pnpm run clean && tsdown --config-loader native",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "pnpm run lint:fmt && pnpm run lint:js && pnpm run typecheck && pnpm run check:wiring",
     "lint:js": "oxlint --deny-warnings",
