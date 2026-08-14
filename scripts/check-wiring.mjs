@@ -17,9 +17,10 @@
  *     same identifier.
  *  4. package.json still declares the `capacitor` manifest the CLI looks for,
  *     and `files` ships the native sources and manifests.
- *  5. The iOS platform floor and the Android minSdk fallback stay at the oldest
- *     supported Capacitor's values, since a plugin may not require more than
- *     its host app.
+ *  5. The iOS platform floor, Android minSdk fallback, and capacitor-swift-pm
+ *     range match this release's declared policy (Capacitor 7 only, iOS 15+,
+ *     Android API 24+) so a stale edit to one file cannot silently drift from
+ *     the others.
  */
 
 import { readFileSync } from "node:fs";
@@ -109,29 +110,37 @@ for (const required of [
   }
 }
 
-// 5. Version floors that make the package installable into the oldest supported
-// Capacitor. Capacitor 7 ships iOS 14.0 and Android minSdk 23.
+// 5. This release's declared floors: iOS 15.0, Android minSdk 24, Capacitor 7
+// only. These are this plugin's own policy, not Capacitor 7's own minimums
+// (14.0 / 23) — consuming apps on the Capacitor 7 template defaults must raise
+// their own floors accordingly (documented in README.md).
 check(
   "podspec deployment target",
   match(podspec, /s\.ios\.deployment_target = '([^']+)'/, "podspec target"),
-  "14.0",
+  "15.0",
 );
 check(
   "Package.swift platform",
   match(packageSwift, /platforms: \[\.iOS\(\.v(\d+)\)\]/, "spm platform"),
-  "14",
+  "15",
 );
+// Deliberately a fixed literal, not `rootProject.ext.minSdkVersion`-conditional
+// like every other version in this file: that pattern lets an embedding app's
+// lower value silently win with no build error (verified empirically), which
+// defeats the point of declaring a floor higher than Capacitor 7's own. A
+// hard-coded value is what makes the manifest merger actually enforce it.
 check(
-  "android minSdk fallback",
-  match(read("android/build.gradle"), /rootProject\.ext\.minSdkVersion : (\d+)/, "android minSdk"),
-  "23",
+  "android minSdk (hard floor, not inherited from the host app)",
+  match(read("android/build.gradle"), /^\s*minSdkVersion (\d+)$/m, "android minSdk"),
+  "24",
 );
-const swiftPmRange = match(
+const swiftPmLowerBound = match(
   packageSwift,
-  /capacitor-swift-pm\.git",\s*"([^"]+)"\.\.<"[^"]+"/,
+  /capacitor-swift-pm\.git",\s*from:\s*"([^"]+)"/,
   "capacitor-swift-pm lower bound",
 );
-check("capacitor-swift-pm lower bound", swiftPmRange, "7.0.0");
+check("capacitor-swift-pm lower bound", swiftPmLowerBound, "7.0.0");
+check("peerDependencies is Capacitor-7-only", pkg.peerDependencies?.["@capacitor/core"], "^7.0.0");
 
 if (failures.length > 0) {
   console.error("Capacitor plugin wiring check failed:");
