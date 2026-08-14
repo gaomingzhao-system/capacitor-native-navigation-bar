@@ -27,7 +27,7 @@
     "Package.swift",
     "LICENSE",
     "NOTICE",
-    "COMPATIBILITY.md"
+    "PLATFORM.md"
   ],
   "type": "module",
   "main": "dist/plugin.cjs",
