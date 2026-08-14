@@ -1,7 +1,7 @@
 # capacitor-native-navigation-bar
 
 Native navbar, tabbar, safe-area reporting, and WebView snapshot transitions for
-Capacitor apps — supports **Capacitor 7 and Capacitor 8+** from a single package.
+**Capacitor 7** apps. Ships as an **ESM-only** npm package.
 
 The plugin renders real UIKit / Android views on top of the WebView, reports how
 much of the viewport they cover (as an event and as CSS variables), and can play
@@ -10,19 +10,45 @@ route underneath.
 
 > 🇯🇵 [日本語 README](./README.ja.md)
 
-
 ## Supported versions
 
-|                                 | Minimum | Verified against                        |
-| ------------------------------- | ------- | --------------------------------------- |
-| Capacitor                       | 7.0.0   | 7.6.8 and 8.5.0                         |
-| iOS deployment target           | 14.0    | iOS 26 simulator, CocoaPods **and** SPM |
-| Android minSdk                  | 23      | API 36 emulator, AGP 8.7.2 and 8.13.0   |
-| Node (for building the package) | 20.19   | 24                                      |
+|                                 | This release | Notes                                          |
+| ------------------------------- | ------------ | ---------------------------------------------- |
+| Capacitor                       | 7.x only     | `peerDependencies`: `@capacitor/core: ^7.0.0`  |
+| Module format                   | ESM only     | no CommonJS, no IIFE/UMD, no `unpkg` bundle    |
+| Node.js (to build this package) | ≥ 22.13.0    | verified on 22.23.2 and current-LTS 24.19.0    |
+| TypeScript                      | 7.x          | native compiler; see [below](#typescript-7)    |
+| iOS deployment target           | 15.0         | higher than Capacitor 7's own 14.0 — see below |
+| Android `minSdk`                | 24 (7.0)     | higher than Capacitor 7's own 23 — see below   |
 
-`peerDependencies` is `@capacitor/core: >=7.0.0 <10.0.0`. Both majors are
-typechecked in CI-style scripts (`pnpm run typecheck`) against real
-`@capacitor/core` 7 and 8 type definitions.
+Capacitor 8 support is **not** included in this release; see
+[Migrating from the 1.x / Capacitor 7+8 release](#migrating-from-the-1x--capacitor-78-release)
+below.
+
+### Your app's floors must meet this plugin's floors
+
+This plugin's iOS and Android floors are **intentionally higher** than
+Capacitor 7's own defaults, for modern-OS support. A plugin's minimum may
+exceed what Capacitor itself requires, but only if the **consuming app** also
+meets it:
+
+- **iOS**: the Capacitor 7 template ships `platform :ios, '14.0'` in the
+  Podfile and an Xcode project deployment target of 14.0. Raise both to
+  **15.0** before installing this plugin.
+  - **Swift Package Manager hard-fails** on this mismatch (verified): `The
+package product 'CapacitorNativeNavigationBar' requires minimum platform
+version 15.0 for the iOS platform, but this target supports 14.0`.
+  - **CocoaPods does not** — it happily builds a 15.0-targeted pod into a
+    14.0-targeted app (per-target deployment targets are valid Xcode config).
+    Raise it anyway: otherwise the app claims iOS 14 support (allowing
+    installs on OS versions this plugin was never exercised on) while linking
+    code that assumes iOS 15 APIs are unconditionally available below its own
+    `if #available` guards.
+- **Android**: the Capacitor 7 template ships `minSdkVersion = 23` in
+  `android/variables.gradle`. Raise it to **24** before installing this
+  plugin, or the manifest merger fails the build:
+  `uses-sdk:minSdkVersion 23 cannot be smaller than version 24 declared in
+library` (verified).
 
 ## Installation
 
@@ -36,21 +62,27 @@ pnpm and bun work too; the Capacitor CLI discovers the plugin through
 ### iOS
 
 - Xcode 15 or newer.
-- CocoaPods: nothing to do — `npx cap sync ios` adds
+- Raise your app's iOS deployment target to 15.0 (see above) before syncing —
+  required for SPM, strongly recommended for CocoaPods.
+- CocoaPods: nothing else to do — `npx cap sync ios` adds
   `pod 'CapacitorNativeNavigationBar'` to the generated Podfile.
-- Swift Package Manager: nothing to do either — the package declares
-  `platforms: [.iOS(.v14)]` and a `capacitor-swift-pm` range that spans
-  Capacitor 7 and 8, so it resolves against whichever version `cap sync` pinned.
+- Swift Package Manager: nothing else to do either — the package declares
+  `platforms: [.iOS(.v15)]` and pins `capacitor-swift-pm` to the Capacitor 7
+  major (`from: "7.0.0"`), so it resolves against whatever 7.x patch `cap
+sync` pinned.
 - The plugin adds its chrome to `bridge.viewController.view`. If your app
   replaces the root view controller, add the plugin's views after that.
 
 ### Android
 
-- JDK 21 (the same JDK Capacitor 7 and 8 require).
-- Nothing to configure: the module reads `compileSdkVersion`, `minSdkVersion`
-  and `targetSdkVersion` from the app's `variables.gradle`.
-- `load()` calls `Window.setDecorFitsSystemWindows(false)` so the native bars can
-  draw into the system bar areas. This applies to the whole activity.
+- JDK 21 (the same JDK Capacitor 7 requires).
+- Raise your app's `minSdkVersion` to 24 in `android/variables.gradle` (see
+  above) before syncing.
+- The module otherwise reads `compileSdkVersion` and `targetSdkVersion` from
+  the app's `variables.gradle`, with Capacitor 7's own defaults (35) as the
+  standalone-build fallback.
+- `load()` calls `Window.setDecorFitsSystemWindows(false)` so the native bars
+  can draw into the system bar areas. This applies to the whole activity.
 
 ## Usage
 
@@ -113,6 +145,14 @@ await NativeNavigation.finishTransition({ direction: "forward" });
 `beginZoomTransition(element)` / `finishZoomTransition(element)` do the same for
 Apple-Zoom-style transitions, taking element rects in viewport coordinates.
 
+If `finishTransition` is never called — an app bug, an exception between the
+two calls, or the app being backgrounded mid-transition — both platforms
+self-heal: a watchdog timer force-restores the WebView shortly after the
+requested duration elapses, and Android/iOS both force-restore it immediately
+if the app is backgrounded first. A `transitionEnd` event still fires so
+listeners relying on a matching pair aren't left hanging. See
+[PLATFORM.md](./PLATFORM.md) for details.
+
 ### Custom elements
 
 `defineNativeNavigationElements()` registers `<cap-native-navigation-provider>`,
@@ -136,34 +176,79 @@ Events: `navbarBack`, `navbarItemTap`, `tabSelect`, `safeAreaChanged`,
 `capNativeNavigation:<event>`.
 
 Full option and event types live in
-[`src/definitions.ts`](./src/definitions.ts) and ship as `dist/esm/index.d.ts`.
+[`src/definitions.ts`](./src/definitions.ts) and ship as `dist/index.d.ts`.
 
 ## Platform behavior
 
 - **iOS 26+** uses the system Liquid Glass `UITabBarController` for floating tab
-  bars, and `UIGlassEffect` for the custom capsule. Earlier iOS falls back to
+  bars, and `UIGlassEffect` for the custom capsule. iOS 15–25 fall back to
   `UIBlurEffect` materials — the whole Liquid Glass path is behind runtime
-  `if #available` checks, so it compiles and runs at the iOS 14 floor.
+  `if #available` checks, so it compiles and runs cleanly at the iOS 15 floor.
 - **Android 12+** renders the `liquidGlass` effect with a `RenderEffect` blur of
-  the WebView behind the bars. Android 11 and older get a translucent surface.
+  the WebView behind the bars. Android 7–11 get a translucent surface.
 - Icons accept inline SVG (rendered natively on both platforms), SF Symbols and
   bundled image/drawable names.
 
 See [PLATFORM.md](./PLATFORM.md) for the full platform and OS-feature support matrix.
 
+## TypeScript 7
+
+This package is typechecked and built with the **native** TypeScript 7
+compiler (`typescript@^7.0.2`), which no longer exposes the classic in-process
+JS Compiler API (`ts.createProgram`, `ts.transpileModule`, etc. are gone —
+`require("typescript")` now only exposes a version string and a set of new
+low-level `typescript/unstable/*` AST APIs; the real compiler ships as a
+platform-specific native binary, e.g. `@typescript/typescript-darwin-arm64`).
+
+This matters for anyone extending this package's tooling: `tsdown`'s
+declaration bundler (`rolldown-plugin-dts`) already detects TypeScript 7 and
+spawns its native `tsc` binary instead of calling the old API, so declaration
+generation works unmodified — verified by this repository's own build. Tools
+that still hard-depend on the classic API (e.g. `ts-morph`, `vue-tsc` in some
+modes) would need their own TypeScript 7 support before they could be added
+here; none are currently used by this package.
+
+`tsdown` currently prints `TypeScript 7.0 does not yet have a stable API and is
+experimental. Some options will be unavailable.` during the build. This is
+expected and does not affect the produced output — verified by inspecting
+`dist/index.d.ts` and by the `attw`/`publint` checks in `verify:web`.
+
 ## Development
 
 ```bash
 pnpm install
-pnpm run lint      # oxfmt --check, oxlint, tsc (against @capacitor/core 7 and 8), wiring check
+pnpm run lint      # oxfmt --check, oxlint, tsc (TypeScript 7), wiring check
 pnpm run test      # vitest
-pnpm run build     # tsdown -> dist/esm, dist/plugin.cjs, dist/plugin.js
+pnpm run build     # tsdown -> dist/index.js + dist/index.d.ts (ESM only)
+pnpm run check:package  # publint --strict + attw --pack . --profile esm-only
 pnpm run verify:ios      # xcodebuild -scheme CapacitorNativeNavigationBar
 pnpm run verify:android  # cd android && ./gradlew clean build test
 ```
 
-`xcodebuild test -scheme CapacitorNativeNavigationBar -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
-runs the Swift unit tests.
+`pnpm run verify:ios:test` runs the Swift unit tests on an iOS Simulator.
+
+## Migrating from the 1.x / Capacitor 7+8 release
+
+This release (2.0.0) is a deliberate breaking change from the earlier
+dual-Capacitor, dual-module-format release:
+
+1. **ESM only.** If your build tooling cannot consume a pure-ESM dependency
+   (no `require()`, no IIFE/CDN bundle), stay on the previous release until you
+   can upgrade your tooling.
+2. **Capacitor 7 only.** `peerDependencies` is now `^7.0.0` instead of
+   `>=7.0.0 <10.0.0`. Capacitor 8 apps should stay on the previous release
+   until Capacitor 8 support ships as a separate release.
+3. **Higher native floors.** iOS 15.0 and Android API 24 — raise your app's
+   own floors as described above.
+4. **Node.js 22.13.0+ to build the package.** Only affects contributors
+   building from source; published `dist/` output is unaffected by the
+   Node.js version used to produce it. (Node 22 LTS itself started at
+   22.11.0; the extra two patch versions are pnpm 11.9.0's own minimum — see
+   [PLATFORM.md](./PLATFORM.md).)
+
+The plugin's own public API is unchanged: the `NativeNavigation` bridge name,
+every method name, option/event shape, custom-element name, and CSS variable
+name are identical to the previous release.
 
 ## License
 
