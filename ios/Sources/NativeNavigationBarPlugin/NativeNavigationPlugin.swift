@@ -87,6 +87,12 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
     private var activeTransitionContainerWasOpaque = false
     private var activeTransitionContainerBackgroundCaptured = false
     private var generatesOrientationNotifications = false
+    /// Safety net for a `beginTransition` that never gets a matching
+    /// `finishTransition` (an app bug, a thrown exception between the two
+    /// calls, or the process getting backgrounded mid-transition). Without
+    /// this the WebView is left at `alpha 0.01` — effectively invisible —
+    /// indefinitely. Cancelled as soon as the transition finishes normally.
+    private var transitionWatchdog: DispatchWorkItem?
 
     private var usesSystemLiquidGlass: Bool {
         if #available(iOS 26.0, *) {
@@ -131,10 +137,21 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             name: UIAccessibility.reduceTransparencyStatusDidChangeNotification,
             object: nil
         )
+        // If the app is backgrounded mid-transition, nothing the user is
+        // watching matters anymore, so force-complete it immediately rather
+        // than leaving the WebView at alpha 0.01 for whenever the process
+        // happens to resume.
+        center.addObserver(
+            self,
+            selector: #selector(handleAppDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        transitionWatchdog?.cancel()
         guard generatesOrientationNotifications else {
             return
         }
@@ -361,11 +378,56 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             self.activeZoomSourceFrame = zoomSourceFrame
             self.activeZoomCornerRadius = cornerRadius
             webView.alpha = 0.01
+            self.armTransitionWatchdog(id: transitionId, durationMs: durationMs)
 
             let event: [String: Any] = ["id": transitionId, "direction": direction, "duration": durationMs]
             self.notifyListeners("transitionStart", data: event)
             call.resolve(event)
         }
+    }
+
+    /// Schedules `recoverStuckTransition` to force-complete `id` if
+    /// `finishTransition` has not cancelled the watchdog by then. The delay is
+    /// generous (the requested duration plus a multi-second grace period) so
+    /// it never fires during a legitimate, merely slow, transition.
+    private func armTransitionWatchdog(id: String, durationMs: Int) {
+        transitionWatchdog?.cancel()
+        let delay = max(TimeInterval(durationMs) / 1_000, defaultTransitionDuration) + 4.0
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.recoverStuckTransition(id: id)
+        }
+        transitionWatchdog = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    @objc private func handleAppDidEnterBackground() {
+        guard let id = activeTransitionId else {
+            return
+        }
+        recoverStuckTransition(id: id)
+    }
+
+    /// Force-completes transition `id` if it is still the active one, restoring
+    /// the WebView to a normal, visible state without requiring a matching
+    /// `finishTransition` call. A no-op if `id` was already finished normally
+    /// or superseded by a newer `beginTransition`.
+    private func recoverStuckTransition(id: String) {
+        transitionWatchdog?.cancel()
+        transitionWatchdog = nil
+        guard activeTransitionId == id, let webView = self.webView else {
+            return
+        }
+        let direction = activeTransitionDirection
+        transitionSnapshot?.removeFromSuperview()
+        webView.transform = .identity
+        webView.alpha = 1
+        webView.layer.cornerRadius = 0
+        webView.clipsToBounds = false
+        transitionSnapshot = nil
+        restoreTransitionContainerBackground()
+        activeTransitionId = nil
+        activeZoomSourceFrame = nil
+        notifyListeners("transitionEnd", data: ["id": id, "direction": direction, "duration": 0])
     }
 
     @objc func finishTransition(_ call: CAPPluginCall) {
@@ -524,6 +586,8 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
     }
 
     private func finishTransitionCleanup(_ transition: NativeNavigationTransitionContext) {
+        transitionWatchdog?.cancel()
+        transitionWatchdog = nil
         transition.snapshot?.removeFromSuperview()
         transition.webView.transform = .identity
         transition.webView.alpha = 1
@@ -668,15 +732,11 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             tabBar.isTranslucent = !prefersOpaqueTabBarBackground()
             let standardAppearance = tabBar.standardAppearance
             tabBar.standardAppearance = standardAppearance
-            if #available(iOS 15.0, *) {
-                let scrollEdgeAppearance = tabBar.scrollEdgeAppearance ?? standardAppearance
-                tabBar.scrollEdgeAppearance = scrollEdgeAppearance
-            }
+            let scrollEdgeAppearance = tabBar.scrollEdgeAppearance ?? standardAppearance
+            tabBar.scrollEdgeAppearance = scrollEdgeAppearance
             tabBar.items?.forEach { item in
                 item.standardAppearance = standardAppearance
-                if #available(iOS 15.0, *) {
-                    item.scrollEdgeAppearance = tabBar.scrollEdgeAppearance
-                }
+                item.scrollEdgeAppearance = tabBar.scrollEdgeAppearance
             }
             tabBar.setNeedsLayout()
             tabBar.layoutIfNeeded()
@@ -1554,14 +1614,10 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
 
             tabBar.isTranslucent = !prefersOpaqueTabBarBackground()
             tabBar.standardAppearance = standardAppearance
-            if #available(iOS 15.0, *) {
-                tabBar.scrollEdgeAppearance = scrollEdgeAppearance
-            }
+            tabBar.scrollEdgeAppearance = scrollEdgeAppearance
             tabBar.items?.forEach { item in
                 item.standardAppearance = standardAppearance
-                if #available(iOS 15.0, *) {
-                    item.scrollEdgeAppearance = scrollEdgeAppearance
-                }
+                item.scrollEdgeAppearance = scrollEdgeAppearance
             }
             applyExperimentalBakedTintColors(tabBar: tabBar, options: call)
             return
@@ -1573,9 +1629,7 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
         applyTabBarBadgeOptions(appearance, options: call)
 
         tabBar.standardAppearance = appearance
-        if #available(iOS 15.0, *) {
-            tabBar.scrollEdgeAppearance = appearance
-        }
+        tabBar.scrollEdgeAppearance = appearance
     }
 
     private func configureTabBarBackground(_ appearance: UITabBarAppearance, options call: CAPPluginCall) {
@@ -1724,7 +1778,7 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             return
         }
 
-        let activeTint = colorValue(colors["tint"]) ?? tabBar.tintColor ?? nativeNavigationDefaultTintColor()
+        let activeTint = colorValue(colors["tint"]) ?? tabBar.tintColor ?? .tintColor
         let inactiveTint = colorValue(colors["inactiveTint"]) ?? tabBar.unselectedItemTintColor ?? .secondaryLabel
         guard colorValue(colors["tint"]) != nil || colorValue(colors["inactiveTint"]) != nil else {
             return
