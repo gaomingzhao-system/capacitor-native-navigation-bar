@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref so pushing a fixup doesn't queue
+# behind (or race) the run it replaces.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web (lint, test, build, package)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      # Node.js 22 LTS is this package's declared floor (see .node-version /
+      # package.json engines). CI intentionally builds on the floor, not just
+      # whatever is newest, so a regression against the documented minimum is
+      # caught here instead of by a consumer.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run test
+      - run: pnpm run build
+      - run: pnpm run check:package
+
+  ios:
+    name: iOS (SPM build + Swift tests)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (generic iOS destination)
+        run: xcodebuild -scheme CapacitorNativeNavigationBar -destination "generic/platform=iOS" build
+      - name: Resolve an available iOS Simulator
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available --json \
+            | python3 -c "import json,sys; data=json.load(sys.stdin)['devices']; \
+              rt=[k for k in data if 'iOS' in k]; \
+              rt.sort(reverse=True); \
+              print(next(d['udid'] for r in rt for d in data[r] if d['name'].startswith('iPhone')))")
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Run Swift unit tests
+        run: xcodebuild test -scheme CapacitorNativeNavigationBar -destination "id=${{ steps.sim.outputs.udid }}"
+
+  android:
+    name: Android (standalone Gradle build + JUnit tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: "pnpm"
+      # Populates node_modules/@capacitor/android, which android/settings.gradle
+      # includes as the ':capacitor-android' project — required before Gradle
+      # can resolve this module on its own, mirroring how a real Capacitor app
+      # wires the plugin in.
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: gradlew clean build test
+        working-directory: android
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          ./gradlew clean build test --no-daemon
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-results
+          path: android/build/test-results/**/*.xml
+          if-no-files-found: ignore
