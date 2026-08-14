@@ -1,10 +1,12 @@
 {
   "compilerOptions": {
     /*
-     * ES2017 is deliberate, not legacy: Capacitor's minimum supported Android
-     * System WebView is version 55 (Bridge.MINIMUM_ANDROID_WEBVIEW_VERSION, the
-     * same in Capacitor 7 and 8), which predates optional chaining and nullish
-     * coalescing. Emitting ES2017 keeps those constructs downleveled.
+     * ES2017 is deliberate, not legacy: it is the runtime/browser output target
+     * (see tsdown.config.ts), not related to the Node.js version used to build
+     * this package. Capacitor's minimum supported Android System WebView is
+     * version 55 (Bridge.MINIMUM_ANDROID_WEBVIEW_VERSION), which predates
+     * optional chaining and nullish coalescing, so the emitted JS must still be
+     * downleveled to ES2017 even though building requires Node.js 22+.
      */
     "target": "ES2017",
     "lib": ["DOM", "DOM.Iterable", "ES2017"],
