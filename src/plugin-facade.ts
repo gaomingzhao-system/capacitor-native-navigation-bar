@@ -58,13 +58,13 @@ export const normalizeDetachedTabRoles = (
   if (detachedIndex < 0) return options;
 
   let changed = false;
-  const normalizedTabs = tabs.map((tab, index) => {
-    if (index === detachedIndex || (tab.role !== "search" && tab.role !== "prominent")) {
-      return tab;
-    }
+  const normalizedTabs = tabs.slice();
+  for (let index = 0; index < detachedIndex; index += 1) {
+    const tab = tabs[index];
+    if (!tab || (tab.role !== "search" && tab.role !== "prominent")) continue;
+    normalizedTabs[index] = { ...tab, role: "normal" };
     changed = true;
-    return { ...tab, role: "normal" as const };
-  });
+  }
   return changed ? { ...options, tabs: normalizedTabs } : options;
 };
 
