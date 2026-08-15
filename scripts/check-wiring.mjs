@@ -58,7 +58,7 @@ const fixName = (name) => {
 
 const pkg = JSON.parse(read("package.json"));
 const iosName = fixName(pkg.name);
-const repositoryBase = "https://github.com/gaomingzhao-system/capacitor-native-navigation-bar";
+const repositoryBase = "https://github.com/gaomingzhao666/capacitor-native-navigation-bar";
 
 if (!/^7\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkg.version)) {
   failures.push(
