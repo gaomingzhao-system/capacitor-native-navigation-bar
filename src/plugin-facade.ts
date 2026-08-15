@@ -36,6 +36,38 @@ export const normalizeNativeNavigationPatch = <T>(value: T): T => {
   return Object.fromEntries(normalizedEntries) as T;
 };
 
+/**
+ * The public contract allows one detached trailing tab: when several tabs use
+ * `search` or `prominent`, the last one wins and the earlier tabs stay visible
+ * as normal tabs. Native iOS builders otherwise discard those earlier entries.
+ */
+export const normalizeDetachedTabRoles = (
+  options: NativeNavigationTabbarOptions,
+): NativeNavigationTabbarOptions => {
+  const tabs = options.tabs;
+  if (!tabs) return options;
+
+  let detachedIndex = -1;
+  for (let index = tabs.length - 1; index >= 0; index -= 1) {
+    const role = tabs[index]?.role;
+    if (role === "search" || role === "prominent") {
+      detachedIndex = index;
+      break;
+    }
+  }
+  if (detachedIndex < 0) return options;
+
+  let changed = false;
+  const normalizedTabs = tabs.map((tab, index) => {
+    if (index === detachedIndex || (tab.role !== "search" && tab.role !== "prominent")) {
+      return tab;
+    }
+    changed = true;
+    return { ...tab, role: "normal" as const };
+  });
+  return changed ? { ...options, tabs: normalizedTabs } : options;
+};
+
 const assertSvgByteLength = (value: string, path: string): void => {
   if (textEncoder.encode(value).byteLength > MAX_SVG_INPUT_BYTES) {
     throw new RangeError(`${path} exceeds the ${MAX_SVG_INPUT_BYTES}-byte SVG limit`);
@@ -202,7 +234,7 @@ export const createNativeNavigationFacade = (
   const setTabbar = async (
     options: NativeNavigationTabbarOptions,
   ): Promise<Awaited<ReturnType<NativeNavigationPlugin["setTabbar"]>>> => {
-    const normalized = normalizeNativeNavigationPatch(options);
+    const normalized = normalizeDetachedTabRoles(normalizeNativeNavigationPatch(options));
     assertSafeTabbarIcons(normalized);
     await ensureTabSelectionObserver();
 

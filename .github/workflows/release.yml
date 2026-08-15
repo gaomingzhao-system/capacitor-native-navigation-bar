@@ -102,7 +102,7 @@ jobs:
           cache: pnpm
           registry-url: "https://registry.npmjs.org"
       - run: pnpm install --frozen-lockfile
-      - name: Validate release branch and version
+      - name: Validate release branch, version, and provenance source
         env:
           EXPECTED_VERSION: ${{ inputs.expected_version }}
         run: |
@@ -114,6 +114,10 @@ jobs:
             const pkg = require("./package.json");
             if (pkg.version !== process.env.EXPECTED_VERSION) {
               throw new Error(`package.json is ${pkg.version}, expected ${process.env.EXPECTED_VERSION}`);
+            }
+            const expectedRepository = `git+${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}.git`;
+            if (pkg.repository?.url !== expectedRepository) {
+              throw new Error(`package.json repository is ${pkg.repository?.url}, expected ${expectedRepository}`);
             }
           '
       - name: Ensure the version is not already published

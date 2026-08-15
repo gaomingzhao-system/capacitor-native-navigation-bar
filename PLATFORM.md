@@ -58,7 +58,7 @@ simulator tests.
 | `compileSdkVersion`   | Host value; standalone fallback 36 |
 | `targetSdkVersion`    | Host value; standalone fallback 36 |
 | JDK / Java bytecode   | 21                                 |
-| Android Gradle Plugin | Standalone 8.13.2                  |
+| Android Gradle Plugin | Host 8.10.0+; standalone 8.13.2    |
 | Gradle wrapper        | 8.14.3                             |
 | AppCompat             | 1.7.1                              |
 | AndroidX Core         | 1.18.0                             |
@@ -157,9 +157,10 @@ Every pull request must pass all jobs in `.github/workflows/ci.yml`:
 3. Standalone Android Gradle build, lint, and JUnit tests using JDK 21.
 
 npm publication must use `.github/workflows/release.yml` from `main`. The
-workflow repeats all three release gates, verifies that `package.json` matches
-the requested version, rejects a version already present on npm, and publishes
-only after all gates succeed.
+workflow repeats all three release gates, verifies the requested version and
+that the package repository matches the GitHub Actions provenance source,
+rejects a version already present on npm, and publishes only after all gates
+succeed.
 
 Repository setup required before the first release:
 

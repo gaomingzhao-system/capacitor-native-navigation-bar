@@ -11,14 +11,14 @@
     "safe-area",
     "tabbar"
   ],
-  "homepage": "https://github.com/gaomingzhao666/capacitor-native-navigation-bar#readme",
+  "homepage": "https://github.com/gaomingzhao-system/capacitor-native-navigation-bar#readme",
   "bugs": {
-    "url": "https://github.com/gaomingzhao666/capacitor-native-navigation-bar/issues"
+    "url": "https://github.com/gaomingzhao-system/capacitor-native-navigation-bar/issues"
   },
   "license": "MPL-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gaomingzhao666/capacitor-native-navigation-bar.git"
+    "url": "git+https://github.com/gaomingzhao-system/capacitor-native-navigation-bar.git"
   },
   "files": [
     "android/build.gradle",

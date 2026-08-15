@@ -68,6 +68,31 @@ describe("createNativeNavigationFacade", () => {
     });
   });
 
+  it("keeps earlier detached-role tabs as normal tabs when the last role wins", async () => {
+    const raw = makeBridge();
+    const plugin = createNativeNavigationFacade(raw.bridge);
+
+    await plugin.setTabbar({
+      selectedId: "home",
+      tabs: [
+        { id: "home" },
+        { id: "search-a", role: "search" },
+        { id: "prominent", role: "prominent" },
+        { id: "search-b", role: "search" },
+      ],
+    });
+
+    expect(raw.setTabbar).toHaveBeenCalledWith({
+      selectedId: "home",
+      tabs: [
+        { id: "home" },
+        { id: "search-a", role: "normal" },
+        { id: "prominent", role: "normal" },
+        { id: "search-b", role: "search" },
+      ],
+    });
+  });
+
   it("removes runtime null values before forwarding patch state", async () => {
     const raw = makeBridge();
     const plugin = createNativeNavigationFacade(raw.bridge);
