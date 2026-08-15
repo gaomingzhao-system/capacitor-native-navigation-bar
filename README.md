@@ -48,7 +48,7 @@ version 15.0 for the iOS platform, but this target supports 14.0`.
   plugin, or the manifest merger fails the build:
   `uses-sdk:minSdkVersion 23 cannot be smaller than version 30 declared in
 library`. Also set `compileSdkVersion = 36` and use Android Gradle Plugin
-  8.9.1 or newer; the default AndroidX Core 1.18.0 dependency publishes those
+  8.10.0 or newer; the default AndroidX Core 1.18.0 dependency publishes those
   consumer minimums.
 
 ## Installation
@@ -79,7 +79,7 @@ sync` pinned.
 - Use JDK 21.
 - Before syncing, set `minSdkVersion = 30` and `compileSdkVersion = 36` in
   `android/variables.gradle` (see above).
-- Use Android Gradle Plugin 8.9.1 or newer. This repository's standalone
+- Use Android Gradle Plugin 8.10.0 or newer. This repository's standalone
   baseline is AGP 8.13.2 with Gradle 8.14.3. The module reads
   `targetSdkVersion` from the app; its standalone fallback is API 36.
 - `load()` calls `Window.setDecorFitsSystemWindows(false)` so the native bars

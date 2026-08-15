@@ -45,7 +45,7 @@ platform version 15.0 for the iOS platform, but this target supports
   `minSdkVersion = 23` を設定します。このプラグインをインストールする前に
   **30** に引き上げてください。そうしないとマニフェストマージで失敗します
   （`uses-sdk:minSdkVersion 23 cannot be smaller than version 30 declared in
-library`）。さらに `compileSdkVersion = 36` と Android Gradle Plugin 8.9.1
+library`）。さらに `compileSdkVersion = 36` と Android Gradle Plugin 8.10.0
   以上が必要です。既定の AndroidX Core 1.18.0 が、この消費側最低条件を公開して
   います。
 
@@ -70,7 +70,7 @@ pnpm や bun も使用できます。Capacitor CLI はいずれのレイアウ�
 - JDK 21 を使用してください。
 - 同期する前に、`android/variables.gradle` で `minSdkVersion = 30` と
   `compileSdkVersion = 36` を設定してください（上記参照）。
-- Android Gradle Plugin 8.9.1 以上を使用してください。このリポジトリの
+- Android Gradle Plugin 8.10.0 以上を使用してください。このリポジトリの
   スタンドアロン基準は AGP 8.13.2 / Gradle 8.14.3 です。
   `targetSdkVersion` はアプリ側の値を読み取り、スタンドアロン時は API 36 へ
   フォールバックします。

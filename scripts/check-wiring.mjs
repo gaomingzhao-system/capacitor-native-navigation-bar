@@ -17,9 +17,9 @@
  *     same identifier.
  *  4. package.json still declares the `capacitor` manifest the CLI looks for,
  *     and `files` ships the native sources and manifests.
- *  5. The npm release line, publish gate, iOS/Android floors, Android build
- *     baseline, JavaScript target, and capacitor-swift-pm range match the
- *     declared Capacitor 7 policy.
+ *  5. The npm source metadata, release line, publish gate, iOS/Android floors,
+ *     Android build baseline, JavaScript target, and capacitor-swift-pm range
+ *     match the declared Capacitor 7 policy.
  */
 
 import { readFileSync } from "node:fs";
@@ -58,6 +58,7 @@ const fixName = (name) => {
 
 const pkg = JSON.parse(read("package.json"));
 const iosName = fixName(pkg.name);
+const repositoryBase = "https://github.com/gaomingzhao-system/capacitor-native-navigation-bar";
 
 if (!/^7\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkg.version)) {
   failures.push(
@@ -66,6 +67,9 @@ if (!/^7\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkg.version)) {
 }
 check("public npm access", pkg.publishConfig?.access, "public");
 check("prepublish verification", pkg.scripts?.prepublishOnly, "pnpm run verify:web");
+check("npm homepage", pkg.homepage, `${repositoryBase}#readme`);
+check("npm bugs URL", pkg.bugs?.url, `${repositoryBase}/issues`);
+check("npm repository URL", pkg.repository?.url, `git+${repositoryBase}.git`);
 
 // 1. Bridge name agreement.
 const jsBridgeName = match(
