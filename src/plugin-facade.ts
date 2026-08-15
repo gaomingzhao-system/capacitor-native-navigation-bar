@@ -17,6 +17,8 @@ const SVG_DATA_PREFIX = "data:image/svg+xml";
 const textEncoder = new TextEncoder();
 
 type JsonRecord = Record<string, unknown>;
+type NativeNavigationTabs = NonNullable<NativeNavigationTabbarOptions["tabs"]>;
+type NativeNavigationTabbarStyle = NonNullable<NativeNavigationTabbarOptions["style"]>;
 
 const isJsonRecord = (value: unknown): value is JsonRecord =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -37,35 +39,39 @@ export const normalizeNativeNavigationPatch = <T>(value: T): T => {
 };
 
 /**
- * The public contract allows one detached trailing tab: when several tabs use
- * `search` or `prominent`, the last one wins and the earlier tabs stay visible
- * as normal tabs. Native iOS builders otherwise discard those earlier entries.
+ * Native floating tabbars allow one visible detached trailing tab. Earlier
+ * visible `search`/`prominent` roles remain normal tabs; hidden roles retain
+ * their declarations so a later selected-id or visibility update can re-evaluate them.
  */
-export const normalizeDetachedTabRoles = (
-  options: NativeNavigationTabbarOptions,
-): NativeNavigationTabbarOptions => {
-  const tabs = options.tabs;
-  if (!tabs) return options;
+const normalizeDetachedTabRoles = (
+  tabs: NativeNavigationTabs,
+  selectedId: string | undefined,
+  shape: NativeNavigationTabbarStyle["shape"],
+): NativeNavigationTabs => {
+  if (shape === "curve") return tabs;
 
   let detachedIndex = -1;
   for (let index = tabs.length - 1; index >= 0; index -= 1) {
-    const role = tabs[index]?.role;
-    if (role === "search" || role === "prominent") {
+    const tab = tabs[index];
+    if (!tab || (tab.hidden === true && tab.id !== selectedId)) continue;
+    if (tab.role === "search" || tab.role === "prominent") {
       detachedIndex = index;
       break;
     }
   }
-  if (detachedIndex < 0) return options;
+  if (detachedIndex < 0) return tabs;
 
   let changed = false;
   const normalizedTabs = tabs.slice();
-  for (let index = 0; index < detachedIndex; index += 1) {
+  for (let index = 0; index < tabs.length; index += 1) {
+    if (index === detachedIndex) continue;
     const tab = tabs[index];
-    if (!tab || (tab.role !== "search" && tab.role !== "prominent")) continue;
+    if (!tab || (tab.hidden === true && tab.id !== selectedId)) continue;
+    if (tab.role !== "search" && tab.role !== "prominent") continue;
     normalizedTabs[index] = { ...tab, role: "normal" };
     changed = true;
   }
-  return changed ? { ...options, tabs: normalizedTabs } : options;
+  return changed ? normalizedTabs : tabs;
 };
 
 const assertSvgByteLength = (value: string, path: string): void => {
@@ -170,6 +176,13 @@ export const createNativeNavigationFacade = (
   let selectedStateDirty = false;
   let selectionGeneration = 0;
   let observerRegistration: Promise<void> | undefined;
+  let tabDefinitions: NativeNavigationTabs | undefined;
+  let tabbarStyle: NativeNavigationTabbarStyle = {};
+
+  const normalizedTabDefinitions = (): NativeNavigationTabs | undefined =>
+    tabDefinitions === undefined
+      ? undefined
+      : normalizeDetachedTabRoles(tabDefinitions, selectedTabId, tabbarStyle.shape);
 
   const rememberNativeSelection = (id: string): void => {
     selectedTabId = id;
@@ -204,10 +217,14 @@ export const createNativeNavigationFacade = (
     if (!hasTabbarState || !selectedStateDirty || selectedTabId === undefined) return;
 
     const generation = selectionGeneration;
-    const selectedId = selectedTabId;
+    const synchronizedOptions: NativeNavigationTabbarOptions = { selectedId: selectedTabId };
+    const tabs = normalizedTabDefinitions();
+    if (tabs !== undefined) synchronizedOptions.tabs = tabs;
+    assertSafeTabbarIcons(synchronizedOptions);
+
     selectedStateDirty = false;
     try {
-      await bridge.setTabbar({ selectedId });
+      await bridge.setTabbar(synchronizedOptions);
     } catch (error) {
       selectedStateDirty = true;
       throw error;
@@ -234,18 +251,32 @@ export const createNativeNavigationFacade = (
   const setTabbar = async (
     options: NativeNavigationTabbarOptions,
   ): Promise<Awaited<ReturnType<NativeNavigationPlugin["setTabbar"]>>> => {
-    const normalized = normalizeDetachedTabRoles(normalizeNativeNavigationPatch(options));
-    assertSafeTabbarIcons(normalized);
+    const normalized = normalizeNativeNavigationPatch(options);
     await ensureTabSelectionObserver();
 
     const hasExplicitSelectedId = Object.prototype.hasOwnProperty.call(normalized, "selectedId");
+    const hasExplicitTabs = Object.prototype.hasOwnProperty.call(normalized, "tabs");
+    const hasStylePatch = Object.prototype.hasOwnProperty.call(normalized, "style");
     const generation = selectionGeneration;
-    if (hasExplicitSelectedId) selectedTabId = normalized.selectedId;
-    const effectiveOptions =
-      !hasExplicitSelectedId && selectedTabId !== undefined
-        ? { ...normalized, selectedId: selectedTabId }
-        : normalized;
 
+    if (hasExplicitSelectedId) selectedTabId = normalized.selectedId;
+    if (hasExplicitTabs) tabDefinitions = normalized.tabs;
+    if (normalized.style !== undefined) {
+      tabbarStyle = { ...tabbarStyle, ...normalized.style };
+    }
+
+    let effectiveOptions: NativeNavigationTabbarOptions = normalized;
+    if (!hasExplicitSelectedId && selectedTabId !== undefined) {
+      effectiveOptions = { ...effectiveOptions, selectedId: selectedTabId };
+    }
+    if (
+      tabDefinitions !== undefined &&
+      (hasExplicitTabs || hasExplicitSelectedId || hasStylePatch || selectedStateDirty)
+    ) {
+      effectiveOptions = { ...effectiveOptions, tabs: normalizedTabDefinitions() };
+    }
+
+    assertSafeTabbarIcons(effectiveOptions);
     const result = await bridge.setTabbar(effectiveOptions);
     hasTabbarState = true;
     if (selectionGeneration === generation) selectedStateDirty = false;
