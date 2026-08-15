@@ -51,7 +51,7 @@ export type NativeNavigationGlassEffect = "none" | "liquidGlass";
 export interface NativeNavigationGlassOptions {
   /**
    * `liquidGlass` enables the Android 12+ live blurred WebView backdrop for
-   * native bars. Android 11 and older keep a translucent surface fallback. iOS
+   * native bars. Android 11 uses a translucent surface fallback. iOS
    * uses the platform-owned Liquid Glass behavior when the running OS provides
    * it, and a blur material otherwise.
    */
@@ -97,7 +97,10 @@ export type NativeNavigationTabRole = "normal" | "search" | "prominent";
  * because icons are rendered by native UI.
  */
 export interface NativeNavigationIcon {
-  /** Cross-platform asset path or URL fallback. */
+  /**
+   * Cross-platform inline SVG, `data:image/svg+xml` URI, or bundled resource
+   * name. Remote URLs and filesystem paths are not fetched.
+   */
   src?: string;
 
   /**
@@ -132,12 +135,12 @@ export interface NativeNavigationIcon {
     svg?: string;
   };
 
-  /** Android-specific drawable resource, asset name, or inline SVG. */
+  /** Android-specific drawable/mipmap resource name or inline SVG. */
   android?: {
     /** Drawable resource name without the `R.drawable.` prefix. */
     resource?: string;
 
-    /** Bundled image asset name. */
+    /** Bundled drawable/mipmap resource name (legacy alias of `resource`). */
     image?: string;
 
     /** Android-specific inline SVG markup. */

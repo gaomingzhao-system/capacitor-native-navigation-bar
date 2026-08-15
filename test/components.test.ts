@@ -80,6 +80,42 @@ describe("defineNativeNavigationElements", () => {
     expect(options.icons).toBe(true);
   });
 
+  it("maps tabbar style and scroll-edge transparency attributes", async () => {
+    const tabbar = document.createElement("cap-native-tabbar");
+    document.body.append(tabbar);
+    await flush();
+    setTabbar.mockClear();
+
+    tabbar.setAttribute("style", '{"shape":"curve","height":88}');
+    tabbar.setAttribute("disable-transparent-on-scroll-edge", "");
+    await flush();
+
+    expect(setTabbar).toHaveBeenCalledTimes(1);
+    const options = setTabbar.mock.calls[0][0];
+    expect(options.style).toEqual({ shape: "curve", height: 88 });
+    expect(options.disableTransparentOnScrollEdge).toBe(true);
+  });
+
+  it.each([
+    ["0", 0],
+    ["250.5", 250.5],
+  ])("passes a finite non-negative animation duration (%s)", async (value, expected) => {
+    document.body.innerHTML = `<cap-native-navigation-provider animation-duration="${value}"></cap-native-navigation-provider>`;
+    await flush();
+
+    expect(configure.mock.calls[0][0].animationDuration).toBe(expected);
+  });
+
+  it.each(["", "-1", "NaN", "Infinity"])(
+    "omits an invalid animation duration (%s)",
+    async (value) => {
+      document.body.innerHTML = `<cap-native-navigation-provider animation-duration="${value}"></cap-native-navigation-provider>`;
+      await flush();
+
+      expect(configure.mock.calls[0][0]).not.toHaveProperty("animationDuration");
+    },
+  );
+
   it("coalesces a burst of attribute writes into one native call", async () => {
     const navbar = document.createElement("cap-native-navbar");
     document.body.append(navbar);

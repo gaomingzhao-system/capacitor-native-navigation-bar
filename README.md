@@ -19,7 +19,7 @@ route underneath.
 | Node.js (to build this package) | ≥ 22.13.0    | verified on 22.23.2 and current-LTS 24.19.0    |
 | TypeScript                      | 7.x          | native compiler; see [below](#typescript-7)    |
 | iOS deployment target           | 15.0         | higher than Capacitor 7's own 14.0 — see below |
-| Android `minSdk`                | 24 (7.0)     | higher than Capacitor 7's own 23 — see below   |
+| Android `minSdk`                | 30 (11)      | higher than Capacitor 7's own 23 — see below   |
 
 Capacitor 8 support is **not** included in this release; see
 [Migrating from the 1.x / Capacitor 7+8 release](#migrating-from-the-1x--capacitor-78-release)
@@ -45,10 +45,12 @@ version 15.0 for the iOS platform, but this target supports 14.0`.
     code that assumes iOS 15 APIs are unconditionally available below its own
     `if #available` guards.
 - **Android**: the Capacitor 7 template ships `minSdkVersion = 23` in
-  `android/variables.gradle`. Raise it to **24** before installing this
+  `android/variables.gradle`. Raise it to **30** before installing this
   plugin, or the manifest merger fails the build:
-  `uses-sdk:minSdkVersion 23 cannot be smaller than version 24 declared in
-library` (verified).
+  `uses-sdk:minSdkVersion 23 cannot be smaller than version 30 declared in
+library`. Also set `compileSdkVersion = 36` and use Android Gradle Plugin
+  8.9.1 or newer; the default AndroidX Core 1.18.0 dependency publishes those
+  consumer minimums.
 
 ## Installation
 
@@ -61,7 +63,7 @@ pnpm and bun work too; the Capacitor CLI discovers the plugin through
 
 ### iOS
 
-- Xcode 15 or newer.
+- Xcode 16 or newer (the Capacitor 7 toolchain requirement).
 - Raise your app's iOS deployment target to 15.0 (see above) before syncing —
   required for SPM, strongly recommended for CocoaPods.
 - CocoaPods: nothing else to do — `npx cap sync ios` adds
@@ -75,12 +77,12 @@ sync` pinned.
 
 ### Android
 
-- JDK 21 (the same JDK Capacitor 7 requires).
-- Raise your app's `minSdkVersion` to 24 in `android/variables.gradle` (see
-  above) before syncing.
-- The module otherwise reads `compileSdkVersion` and `targetSdkVersion` from
-  the app's `variables.gradle`, with Capacitor 7's own defaults (35) as the
-  standalone-build fallback.
+- Use JDK 21.
+- Before syncing, set `minSdkVersion = 30` and `compileSdkVersion = 36` in
+  `android/variables.gradle` (see above).
+- Use Android Gradle Plugin 8.9.1 or newer. This repository's standalone
+  baseline is AGP 8.13.2 with Gradle 8.14.3. The module reads
+  `targetSdkVersion` from the app; its standalone fallback is API 36.
 - `load()` calls `Window.setDecorFitsSystemWindows(false)` so the native bars
   can draw into the system bar areas. This applies to the whole activity.
 
@@ -132,6 +134,14 @@ body {
    --cap-native-navbar-height, --cap-native-tabbar-height */
 ```
 
+The values are CSS pixels/native points on every platform, independent of the
+Android display density. Switching to `contentInsetMode: "none"` removes any
+variables written by an earlier `"css"` configuration.
+
+`configure`, `setNavbar`, and `setTabbar` use patch semantics: omitted fields
+retain their previous values, including nested `colors`, `glass`, and `style`
+fields. Pass an explicit empty array or value when you intend to clear state.
+
 ### Native transitions
 
 Wrap a route change so native animates over a snapshot of the old page:
@@ -144,6 +154,9 @@ await NativeNavigation.finishTransition({ direction: "forward" });
 
 `beginZoomTransition(element)` / `finishZoomTransition(element)` do the same for
 Apple-Zoom-style transitions, taking element rects in viewport coordinates.
+
+Only the active transition can be finished. A mismatched explicit transition
+id is rejected without disturbing the active snapshot.
 
 If `finishTransition` is never called — an app bug, an exception between the
 two calls, or the app being backgrounded mid-transition — both platforms
@@ -185,7 +198,7 @@ Full option and event types live in
   `UIBlurEffect` materials — the whole Liquid Glass path is behind runtime
   `if #available` checks, so it compiles and runs cleanly at the iOS 15 floor.
 - **Android 12+** renders the `liquidGlass` effect with a `RenderEffect` blur of
-  the WebView behind the bars. Android 7–11 get a translucent surface.
+  the WebView behind the bars. Android 11 uses a translucent surface fallback.
 - Icons accept inline SVG (rendered natively on both platforms), SF Symbols and
   bundled image/drawable names.
 
@@ -238,7 +251,7 @@ dual-Capacitor, dual-module-format release:
 2. **Capacitor 7 only.** `peerDependencies` is now `^7.0.0` instead of
    `>=7.0.0 <10.0.0`. Capacitor 8 apps should stay on the previous release
    until Capacitor 8 support ships as a separate release.
-3. **Higher native floors.** iOS 15.0 and Android API 24 — raise your app's
+3. **Higher native floors.** iOS 15.0 and Android API 30 — raise your app's
    own floors as described above.
 4. **Node.js 22.13.0+ to build the package.** Only affects contributors
    building from source; published `dist/` output is unaffected by the
@@ -261,8 +274,8 @@ implementation differences only.
 | JavaScript output          | ESM only through `dist/index.js`                                                                                    | ESM, CommonJS, and IIFE/UMD through `module`, `main`, and `unpkg`                         |
 | Build toolchain            | TypeScript 7 native compiler, `tsdown`, pnpm 11.9, Node.js 22.13+                                                   | TypeScript 5.9, `tsc`, Rollup, Bun scripts, Node.js 22+                                   |
 | iOS SwiftPM dependency     | `capacitor-swift-pm` from `7.0.0`; product `CapacitorNativeNavigationBar`                                           | `capacitor-swift-pm` from `8.0.0`; product `CapgoCapacitorNativeNavigation`               |
-| Android build baseline     | Fallback SDK 35, AGP 8.7.2, Java 17 bytecode                                                                        | Fallback SDK 36, AGP 8.13.0, Java 21 bytecode                                             |
-| Android minimum SDK        | Hard-enforced `minSdkVersion 24`                                                                                    | Uses the host `minSdkVersion` when supplied; fallback is 24                               |
+| Android build baseline     | Fallback SDK 36, AGP 8.13.2, Gradle 8.14.3, Java 21 language/bytecode                                               | Fallback SDK 36, AGP 8.13.0, Gradle 8.14.3, Java 21 bytecode                              |
+| Android minimum SDK        | Hard-enforced `minSdkVersion 30`                                                                                    | Uses the host `minSdkVersion` when supplied; fallback is 24                               |
 | Transition recovery        | iOS and Android watchdog plus immediate recovery when the app is backgrounded                                       | No equivalent recovery path in the current native implementation                          |
 | Android resize and cleanup | Re-layouts on content-root size changes, removes native views/listeners on destroy, and recycles transition bitmaps | No corresponding root-size observer, teardown path, or explicit transition-bitmap recycle |
 

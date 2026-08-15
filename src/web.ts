@@ -19,8 +19,18 @@ import type {
 } from "./definitions";
 
 const DEFAULT_NAVBAR_HEIGHT = 44;
-const DEFAULT_TABBAR_HEIGHT = 49;
+const DEFAULT_TABBAR_HEIGHT = 64;
+const DEFAULT_TABBAR_BOTTOM_GAP = 10;
 const DEFAULT_TRANSITION_DURATION = 350;
+const MAX_TRANSITION_DURATION = 60_000;
+const CSS_INSET_VARIABLES = [
+  "--cap-native-navigation-top",
+  "--cap-native-navigation-right",
+  "--cap-native-navigation-bottom",
+  "--cap-native-navigation-left",
+  "--cap-native-navbar-height",
+  "--cap-native-tabbar-height",
+] as const;
 
 export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPlugin {
   private config: NativeNavigationConfigureOptions = {
@@ -28,13 +38,17 @@ export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPl
     enabled: true,
     platformStyle: "auto",
   };
-  private navbar: NativeNavigationNavbarOptions = { hidden: true };
-  private tabbar: NativeNavigationTabbarOptions = { hidden: true };
+  private navbar: NativeNavigationNavbarOptions = {};
+  private tabbar: NativeNavigationTabbarOptions = {};
+  private hasNavbarState = false;
+  private hasTabbarState = false;
+  private transitionSequence = 0;
   private activeTransition: NativeNavigationTransitionResult | null = null;
 
   async configure(
     options: NativeNavigationConfigureOptions = {},
   ): Promise<NativeNavigationInsetsResult> {
+    this.validateDuration(options.animationDuration, "animationDuration");
     this.config = {
       ...this.config,
       ...options,
@@ -51,6 +65,7 @@ export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPl
       colors: { ...this.navbar.colors, ...options.colors },
       glass: { ...this.navbar.glass, ...options.glass },
     };
+    this.hasNavbarState = true;
     return this.applyInsets();
   }
 
@@ -62,12 +77,23 @@ export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPl
       style: { ...this.tabbar.style, ...options.style },
       glass: { ...this.tabbar.glass, ...options.glass },
     };
+    this.hasTabbarState = true;
     return this.applyInsets();
   }
 
   async beginTransition(
     options: NativeNavigationBeginTransitionOptions = {},
   ): Promise<NativeNavigationTransitionResult> {
+    this.validateDuration(options.duration, "duration");
+    if (this.activeTransition) {
+      const interrupted = { ...this.activeTransition, duration: 0 };
+      // Clear ownership before notifying. A listener is allowed to call back
+      // into the plugin, and must not be able to finish the interrupted
+      // session a second time while its end event is being delivered.
+      this.activeTransition = null;
+      this.notifyListeners("transitionEnd", interrupted);
+      this.dispatchWindowEvent("transitionEnd", interrupted);
+    }
     const transition = this.createTransition(options.id, options.direction, options.duration);
     this.activeTransition = transition;
     this.notifyListeners("transitionStart", transition);
@@ -78,14 +104,18 @@ export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPl
   async finishTransition(
     options: NativeNavigationFinishTransitionOptions = {},
   ): Promise<NativeNavigationTransitionResult> {
-    const transition =
-      this.activeTransition && (!options.id || options.id === this.activeTransition.id)
-        ? {
-            ...this.activeTransition,
-            direction: options.direction ?? this.activeTransition.direction,
-            duration: options.duration ?? this.activeTransition.duration,
-          }
-        : this.createTransition(options.id, options.direction, options.duration);
+    const activeTransition = this.activeTransition;
+    if (!activeTransition) throw new Error("No active transition");
+    if (options.id !== undefined && options.id !== activeTransition.id) {
+      throw new Error("Transition id does not match the active transition");
+    }
+    this.validateDuration(options.duration, "duration");
+
+    const transition = {
+      ...activeTransition,
+      direction: options.direction ?? activeTransition.direction,
+      duration: options.duration ?? activeTransition.duration,
+    };
 
     this.activeTransition = null;
     this.notifyListeners("transitionEnd", transition);
@@ -98,32 +128,48 @@ export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPl
   }
 
   private createTransition(
-    id = `transition-${Date.now()}`,
+    id: string | undefined,
     direction: NativeNavigationTransitionDirection = "forward",
     duration = this.config.animationDuration ?? DEFAULT_TRANSITION_DURATION,
   ): NativeNavigationTransitionResult {
-    return { id, direction, duration };
+    return { id: id ?? this.nextTransitionId(), direction, duration };
+  }
+
+  private nextTransitionId(): string {
+    this.transitionSequence += 1;
+    return `transition-${Date.now()}-${this.transitionSequence}`;
+  }
+
+  private validateDuration(value: number | undefined, name: string): void {
+    if (
+      value !== undefined &&
+      (!Number.isFinite(value) || value < 0 || value > MAX_TRANSITION_DURATION)
+    ) {
+      throw new Error(`${name} must be a finite value between 0 and 60000 milliseconds`);
+    }
   }
 
   private currentTabbarHeight(): number {
     const style = this.tabbar.style;
-    if (!style) return DEFAULT_TABBAR_HEIGHT;
-
-    const defaultHeight =
-      style.shape === "curve" ? 76 : style.shape === "floating" ? 64 : DEFAULT_TABBAR_HEIGHT;
-    const height = style.height ?? defaultHeight;
-    const bottomGap = style.bottomGap ?? (style.shape === "curve" ? 0 : 10);
+    const shape = style?.shape ?? "floating";
+    const defaultHeight = shape === "curve" ? 76 : DEFAULT_TABBAR_HEIGHT;
+    const height = style?.height ?? defaultHeight;
+    const bottomGap = style?.bottomGap ?? (shape === "curve" ? 0 : DEFAULT_TABBAR_BOTTOM_GAP);
     const centerButtonLift =
-      style.shape === "curve"
-        ? (style.centerButtonLift ?? (style.centerButtonDiameter ?? 56) / 2)
-        : 0;
+      shape === "curve" ? (style?.centerButtonLift ?? (style?.centerButtonDiameter ?? 56) / 2) : 0;
     return Math.ceil(height + bottomGap + centerButtonLift);
+  }
+
+  private hasVisibleTabItems(): boolean {
+    const selectedId = this.tabbar.selectedId;
+    return (this.tabbar.tabs ?? []).some((tab) => tab.hidden !== true || tab.id === selectedId);
   }
 
   private applyInsets(): NativeNavigationInsetsResult {
     const enabled = this.config.enabled !== false;
-    const navbarVisible = enabled && this.navbar.hidden !== true;
-    const tabbarVisible = enabled && this.tabbar.hidden !== true;
+    const navbarVisible = enabled && this.hasNavbarState && this.navbar.hidden !== true;
+    const tabbarVisible =
+      enabled && this.hasTabbarState && this.tabbar.hidden !== true && this.hasVisibleTabItems();
     const tabbarHeight = tabbarVisible ? this.currentTabbarHeight() : 0;
     const insets: NativeNavigationInsets = {
       top: navbarVisible ? DEFAULT_NAVBAR_HEIGHT : 0,
@@ -134,14 +180,18 @@ export class NativeNavigationWeb extends WebPlugin implements NativeNavigationPl
       tabbarHeight,
     };
 
-    if (this.config.contentInsetMode !== "none" && typeof document !== "undefined") {
+    if (typeof document !== "undefined") {
       const root = document.documentElement;
-      root.style.setProperty("--cap-native-navigation-top", `${insets.top}px`);
-      root.style.setProperty("--cap-native-navigation-right", `${insets.right}px`);
-      root.style.setProperty("--cap-native-navigation-bottom", `${insets.bottom}px`);
-      root.style.setProperty("--cap-native-navigation-left", `${insets.left}px`);
-      root.style.setProperty("--cap-native-navbar-height", `${insets.navbarHeight}px`);
-      root.style.setProperty("--cap-native-tabbar-height", `${insets.tabbarHeight}px`);
+      if (this.config.contentInsetMode === "none") {
+        for (const name of CSS_INSET_VARIABLES) root.style.removeProperty(name);
+      } else {
+        root.style.setProperty("--cap-native-navigation-top", `${insets.top}px`);
+        root.style.setProperty("--cap-native-navigation-right", `${insets.right}px`);
+        root.style.setProperty("--cap-native-navigation-bottom", `${insets.bottom}px`);
+        root.style.setProperty("--cap-native-navigation-left", `${insets.left}px`);
+        root.style.setProperty("--cap-native-navbar-height", `${insets.navbarHeight}px`);
+        root.style.setProperty("--cap-native-tabbar-height", `${insets.tabbarHeight}px`);
+      }
     }
 
     const event = { insets };

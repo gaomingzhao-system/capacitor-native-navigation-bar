@@ -20,6 +20,13 @@ const normalizeAttribute = (value: string | null): string | undefined =>
 const typedAttribute = <T extends string>(element: Element, name: string): T | undefined =>
   normalizeAttribute(element.getAttribute(name)) as T | undefined;
 
+const nonNegativeFiniteNumberAttribute = (element: Element, name: string): number | undefined => {
+  const value = element.getAttribute(name);
+  if (value === null || value.trim() === "") return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : undefined;
+};
+
 const parseJsonAttribute = <T>(element: Element, name: string, fallback: T): T => {
   const value = element.getAttribute(name);
   if (!value) return fallback;
@@ -88,7 +95,7 @@ export function defineNativeNavigationElements(): void {
     }
 
     protected override applyState(): Promise<unknown> {
-      const duration = this.getAttribute("animation-duration");
+      const animationDuration = nonNegativeFiniteNumberAttribute(this, "animation-duration");
       const options: NativeNavigationConfigureOptions = {
         enabled: parseBoolean(this.getAttribute("enabled"), true),
         platformStyle:
@@ -112,7 +119,7 @@ export function defineNativeNavigationElements(): void {
           undefined as NativeNavigationConfigureOptions["glass"],
         ),
       };
-      if (duration) options.animationDuration = Number(duration);
+      if (animationDuration !== undefined) options.animationDuration = animationDuration;
       return NativeNavigation.configure(options);
     }
   }
@@ -180,7 +187,9 @@ export function defineNativeNavigationElements(): void {
         "icons",
         "colors",
         "glass",
+        "style",
         "blur-effect",
+        "disable-transparent-on-scroll-edge",
         "disable-indicator",
         "indicator-color",
         "ripple-color",
@@ -211,9 +220,17 @@ export function defineNativeNavigationElements(): void {
           "glass",
           undefined as NativeNavigationTabbarOptions["glass"],
         ),
+        style: parseJsonAttribute(
+          this,
+          "style",
+          undefined as NativeNavigationTabbarOptions["style"],
+        ),
         blurEffect: typedAttribute<NonNullable<NativeNavigationTabbarOptions["blurEffect"]>>(
           this,
           "blur-effect",
+        ),
+        disableTransparentOnScrollEdge: parseBoolean(
+          this.getAttribute("disable-transparent-on-scroll-edge"),
         ),
         disableIndicator: parseBoolean(this.getAttribute("disable-indicator")),
         indicatorColor: normalizeAttribute(this.getAttribute("indicator-color")),

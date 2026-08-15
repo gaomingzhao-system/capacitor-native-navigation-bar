@@ -11,6 +11,20 @@
 
 import UIKit
 
+private let nativeNavigationMaximumSVGIconDimension: CGFloat = 512
+private let nativeNavigationMaximumSVGInputBytes = 256 * 1_024
+private let nativeNavigationMaximumSVGElementCount = 2_048
+private let nativeNavigationMaximumSVGDepth = 64
+
+func nativeNavigationIsValidSVGIconSize(_ size: CGSize) -> Bool {
+    size.width.isFinite
+        && size.height.isFinite
+        && size.width >= 1
+        && size.height >= 1
+        && size.width <= nativeNavigationMaximumSVGIconDimension
+        && size.height <= nativeNavigationMaximumSVGIconDimension
+}
+
 struct SVGRenderStyle {
     var fill = true
     var stroke = false
@@ -59,19 +73,35 @@ struct SVGRenderStyle {
 final class SVGIconRenderer: NSObject, XMLParserDelegate {
     private let context: CGContext
     private var styleStack = [SVGRenderStyle()]
+    private var elementCount = 0
+    private var elementDepth = 0
+    private(set) var exceededSafetyLimits = false
 
     init(context: CGContext) {
         self.context = context
     }
 
     static func render(svg: String, size: CGSize) -> UIImage? {
-        guard let data = svg.data(using: .utf8) else {
+        guard nativeNavigationIsValidSVGIconSize(size),
+              svg.utf8.count <= nativeNavigationMaximumSVGInputBytes,
+              svg.range(of: "<!DOCTYPE", options: .caseInsensitive) == nil,
+              svg.range(of: "<!ENTITY", options: .caseInsensitive) == nil,
+              let data = svg.data(using: .utf8) else {
             return nil
         }
 
         let viewBox = viewBox(in: svg) ?? CGRect(origin: .zero, size: size)
+        guard viewBox.minX.isFinite,
+              viewBox.minY.isFinite,
+              viewBox.width.isFinite,
+              viewBox.height.isFinite,
+              viewBox.width > 0,
+              viewBox.height > 0 else {
+            return nil
+        }
         let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { rendererContext in
+        var parseSucceeded = false
+        let image = renderer.image { rendererContext in
             let context = rendererContext.cgContext
             context.saveGState()
             context.scaleBy(x: size.width / max(viewBox.width, 1), y: size.height / max(viewBox.height, 1))
@@ -80,9 +110,11 @@ final class SVGIconRenderer: NSObject, XMLParserDelegate {
             let parser = XMLParser(data: data)
             let delegate = SVGIconRenderer(context: context)
             parser.delegate = delegate
-            parser.parse()
+            parser.shouldResolveExternalEntities = false
+            parseSucceeded = parser.parse() && !delegate.exceededSafetyLimits
             context.restoreGState()
         }
+        return parseSucceeded ? image : nil
     }
 
     func parser(
@@ -92,6 +124,15 @@ final class SVGIconRenderer: NSObject, XMLParserDelegate {
         qualifiedName qName: String?,
         attributes attributeDict: [String: String]
     ) {
+        elementCount += 1
+        elementDepth += 1
+        guard elementCount <= nativeNavigationMaximumSVGElementCount,
+              elementDepth <= nativeNavigationMaximumSVGDepth else {
+            exceededSafetyLimits = true
+            parser.abortParsing()
+            return
+        }
+
         var style = styleStack.last ?? SVGRenderStyle()
         style.apply(attributeDict)
         styleStack.append(style)
@@ -153,6 +194,17 @@ final class SVGIconRenderer: NSObject, XMLParserDelegate {
         if styleStack.count > 1 {
             styleStack.removeLast()
         }
+        elementDepth = max(0, elementDepth - 1)
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        resolveExternalEntityName name: String,
+        systemID: String?
+    ) -> Data? {
+        exceededSafetyLimits = true
+        parser.abortParsing()
+        return nil
     }
 
     private func draw(_ path: UIBezierPath, style: SVGRenderStyle) {
@@ -178,7 +230,7 @@ final class SVGIconRenderer: NSObject, XMLParserDelegate {
         }
         let allowed = CharacterSet(charactersIn: "-+.0123456789eE")
         let prefix = String(value.unicodeScalars.prefix { allowed.contains($0) })
-        guard let double = Double(prefix) else {
+        guard let double = Double(prefix), double.isFinite else {
             return nil
         }
         return CGFloat(double)
@@ -231,7 +283,8 @@ final class SVGIconRenderer: NSObject, XMLParserDelegate {
         var values: [CGFloat] = []
         for match in expression.matches(in: value, range: range) {
             if let valueRange = Range(match.range, in: value),
-               let double = Double(value[valueRange]) {
+               let double = Double(value[valueRange]),
+               double.isFinite {
                 values.append(CGFloat(double))
             }
         }
@@ -262,7 +315,14 @@ final class SVGPathParser {
             guard let command = command else {
                 break
             }
+            let consumeStart = index
             consume(command, into: path)
+            if index == consumeStart {
+                self.command = nil
+                if index < tokens.count, commandToken() == nil {
+                    index += 1
+                }
+            }
         }
         return path
     }
@@ -373,7 +433,8 @@ final class SVGPathParser {
     private func number() -> CGFloat? {
         guard index < tokens.count,
               commandToken() == nil,
-              let value = Double(tokens[index]) else {
+              let value = Double(tokens[index]),
+              value.isFinite else {
             return nil
         }
         index += 1

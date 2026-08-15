@@ -247,6 +247,220 @@ class NativeNavigationTests: XCTestCase {
         XCTAssertEqual(path.bounds.maxY, 12, accuracy: 0.001)
     }
 
+    func testMalformedSVGPathAlwaysMakesProgressAfterCloseCommand() {
+        let path = SVGPathParser("M0 0 L12 0 Z 1").parse()
+
+        XCTAssertFalse(path.isEmpty)
+        XCTAssertEqual(path.bounds.maxX, 12, accuracy: 0.001)
+    }
+
+    func testSVGRendererRejectsUnsafeImageSizes() {
+        let svg = "<svg viewBox=\"0 0 24 24\"><rect width=\"24\" height=\"24\"/></svg>"
+
+        XCTAssertNil(SVGIconRenderer.render(svg: svg, size: .zero))
+        XCTAssertNil(SVGIconRenderer.render(svg: svg, size: CGSize(width: 513, height: 24)))
+        XCTAssertNil(SVGIconRenderer.render(svg: svg, size: CGSize(width: .infinity, height: 24)))
+        XCTAssertTrue(nativeNavigationIsValidSVGIconSize(CGSize(width: 24, height: 24)))
+    }
+
+    func testSVGRendererRejectsOversizedOrMalformedInput() {
+        let oversized = "<svg>" + String(repeating: " ", count: 256 * 1_024) + "</svg>"
+        let malformed = "<svg><rect width=\"24\" height=\"24\"/>"
+
+        XCTAssertNil(SVGIconRenderer.render(svg: oversized, size: CGSize(width: 24, height: 24)))
+        XCTAssertNil(SVGIconRenderer.render(svg: malformed, size: CGSize(width: 24, height: 24)))
+    }
+
+    func testSVGRendererRejectsDocumentTypeAndEntityDeclarations() {
+        let document = """
+        <!DOCTYPE svg [<!ENTITY payload "unsafe">]>
+        <svg viewBox="0 0 24 24"><text>&payload;</text></svg>
+        """
+
+        XCTAssertNil(SVGIconRenderer.render(svg: document, size: CGSize(width: 24, height: 24)))
+    }
+
+    func testSVGRendererRejectsExcessiveElementCountAndDepth() {
+        let tooManyElements = "<svg>" + String(repeating: "<g/>", count: 2_048) + "</svg>"
+        let tooDeep = "<svg>" + String(repeating: "<g>", count: 64)
+            + String(repeating: "</g>", count: 64) + "</svg>"
+
+        XCTAssertNil(SVGIconRenderer.render(svg: tooManyElements, size: CGSize(width: 24, height: 24)))
+        XCTAssertNil(SVGIconRenderer.render(svg: tooDeep, size: CGSize(width: 24, height: 24)))
+    }
+
+    func testDurationValidationRejectsNonFiniteNegativeAndUnboundedValues() {
+        XCTAssertEqual(nativeNavigationDurationMilliseconds(nil, fallback: 350), 350)
+        XCTAssertEqual(nativeNavigationDurationMilliseconds(120.4, fallback: 350), 120)
+        XCTAssertNil(nativeNavigationDurationMilliseconds(Double.nan, fallback: 350))
+        XCTAssertNil(nativeNavigationDurationMilliseconds(Double.infinity, fallback: 350))
+        XCTAssertNil(nativeNavigationDurationMilliseconds(true, fallback: 350))
+        XCTAssertNil(nativeNavigationDurationMilliseconds(-1, fallback: 350))
+        XCTAssertNil(nativeNavigationDurationMilliseconds(60_001, fallback: 350))
+    }
+
+    func testGeneratedTransitionIdentifiersRemainUniqueWithinOneMillisecond() {
+        let first = nativeNavigationTransitionIdentifier(
+            explicitId: nil,
+            timestampMilliseconds: 1_234,
+            generation: 1
+        )
+        let second = nativeNavigationTransitionIdentifier(
+            explicitId: nil,
+            timestampMilliseconds: 1_234,
+            generation: 2
+        )
+
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(
+            nativeNavigationTransitionIdentifier(
+                explicitId: "route-transition",
+                timestampMilliseconds: 1_234,
+                generation: 3
+            ),
+            "route-transition"
+        )
+    }
+
+    func testTransitionRectSafetyRejectsNonFiniteAndUnboundedGeometry() {
+        XCTAssertTrue(nativeNavigationIsSafeTransitionRect(
+            CGRect(x: -100, y: 20, width: 300, height: 400)
+        ))
+        XCTAssertFalse(nativeNavigationIsSafeTransitionRect(
+            CGRect(x: .greatestFiniteMagnitude, y: 0, width: 100, height: 100)
+        ))
+        XCTAssertFalse(nativeNavigationIsSafeTransitionRect(
+            CGRect(x: .infinity, y: 0, width: 100, height: 100)
+        ))
+        XCTAssertFalse(nativeNavigationIsSafeTransitionRect(
+            CGRect(x: 0, y: 0, width: 4_097, height: 100)
+        ))
+        XCTAssertFalse(nativeNavigationIsSafeTransitionRect(
+            CGRect(x: 0, y: 0, width: 0, height: 100)
+        ))
+    }
+
+    func testGlassSurfaceAlphaIsFiniteAndClampedToUnitInterval() {
+        XCTAssertEqual(nativeNavigationClampedUnitInterval(nil, fallback: 0.62), 0.62, accuracy: 0.001)
+        XCTAssertEqual(nativeNavigationClampedUnitInterval(-2, fallback: 0.62), 0, accuracy: 0.001)
+        XCTAssertEqual(nativeNavigationClampedUnitInterval(2, fallback: 0.62), 1, accuracy: 0.001)
+        XCTAssertEqual(nativeNavigationClampedUnitInterval(0.25, fallback: 0.62), 0.25, accuracy: 0.001)
+        XCTAssertEqual(nativeNavigationClampedUnitInterval(Double.nan, fallback: 0.62), 0.62, accuracy: 0.001)
+    }
+
+    func testOptionPatchDeepMergesSupportedNestedObjects() {
+        let current: [String: Any] = [
+            "hidden": false,
+            "colors": ["tint": "#ff0000", "background": "#ffffff"],
+            "style": ["height": 64, "bottomGap": 10]
+        ]
+        let patch: [String: Any] = [
+            "selectedId": "library",
+            "colors": ["badgeText": "#000000"],
+            "style": ["bottomGap": 20]
+        ]
+
+        let merged = nativeNavigationMergeOptions(
+            current: current,
+            patch: patch,
+            nestedKeys: ["colors", "glass", "style"]
+        )
+        let colors = merged["colors"] as? [String: Any]
+        let style = merged["style"] as? [String: Any]
+
+        XCTAssertEqual(merged["hidden"] as? Bool, false)
+        XCTAssertEqual(merged["selectedId"] as? String, "library")
+        XCTAssertEqual(colors?["tint"] as? String, "#ff0000")
+        XCTAssertEqual(colors?["badgeText"] as? String, "#000000")
+        XCTAssertEqual(style?["height"] as? Int, 64)
+        XCTAssertEqual(style?["bottomGap"] as? Int, 20)
+    }
+
+    func testInitialBarPatchDefaultsVisibleAndExplicitHiddenPersists() {
+        let initialPatch = nativeNavigationMergeOptions(
+            current: [:],
+            patch: ["title": "Library"],
+            nestedKeys: ["colors", "glass"]
+        )
+
+        XCTAssertNil(initialPatch["hidden"])
+        XCTAssertFalse(initialPatch["hidden"] as? Bool ?? false)
+
+        let hiddenState = nativeNavigationMergeOptions(
+            current: ["hidden": true],
+            patch: ["title": "Library"],
+            nestedKeys: ["colors", "glass"]
+        )
+
+        XCTAssertEqual(hiddenState["hidden"] as? Bool, true)
+    }
+
+    func testBarOptionsInheritSharedColorsAndOverrideSharedGlass() {
+        let effective = nativeNavigationEffectiveBarOptions(
+            configure: [
+                "colors": ["tint": "#ff0000", "background": "#ffffff"],
+                "glass": ["effect": "liquidGlass", "surfaceAlpha": 0.5]
+            ],
+            bar: [
+                "colors": ["background": "#000000"],
+                "glass": ["effect": "none"]
+            ]
+        )
+        let colors = effective["colors"] as? [String: Any]
+        let glass = effective["glass"] as? [String: Any]
+
+        XCTAssertEqual(colors?["tint"] as? String, "#ff0000")
+        XCTAssertEqual(colors?["background"] as? String, "#000000")
+        XCTAssertEqual(glass?["effect"] as? String, "none")
+        XCTAssertEqual(glass?["surfaceAlpha"] as? Double, 0.5)
+    }
+
+    func testTransparentChromeContainerPassesThroughEmptyArea() {
+        let container = NativeNavigationChromeContainer(frame: CGRect(x: 0, y: 0, width: 200, height: 80))
+        container.hitSlop = UIEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        let button = UIButton(frame: CGRect(x: 20, y: 20, width: 44, height: 44))
+        container.addSubview(button)
+
+        XCTAssertNil(container.hitTest(CGPoint(x: 150, y: 40), with: nil))
+        XCTAssertNil(container.hitTest(CGPoint(x: 100, y: 90), with: nil))
+        XCTAssertTrue(container.hitTest(CGPoint(x: 42, y: 42), with: nil) === button)
+    }
+
+    func testFloatingTabbarPassesThroughDetachedActionGap() {
+        let bar = NativeNavigationFloatingTabBar(frame: CGRect(x: 0, y: 0, width: 400, height: 64))
+        var style = NativeNavigationTabbarStyleConfig()
+        style.shape = .floating
+        style.height = 64
+        bar.configure(
+            items: [
+                makeItem(id: "home", index: 0),
+                makeItem(id: "search", index: 1, detachedTrailing: true)
+            ],
+            selectedIndex: 0,
+            labelVisibilityMode: "labeled",
+            icons: true,
+            style: style
+        )
+        bar.layoutIfNeeded()
+
+        let gapPoint = CGPoint(x: bar.capsuleBounds(in: bar.bounds).maxX + 5, y: bar.bounds.midY)
+        XCTAssertNil(bar.hitTest(gapPoint, with: nil))
+    }
+
+    func testNavigationBarHeightUsesUIKitFittingSizeForPrompt() {
+        let navBar = UINavigationBar(frame: CGRect(x: 0, y: 0, width: 320, height: 44))
+        let item = UINavigationItem(title: "Library")
+        navBar.setItems([item], animated: false)
+        let plainHeight = nativeNavigationMeasuredNavigationBarHeight(navBar, width: 320)
+
+        item.prompt = "Collection"
+        navBar.setNeedsLayout()
+        let promptHeight = nativeNavigationMeasuredNavigationBarHeight(navBar, width: 320)
+
+        XCTAssertGreaterThanOrEqual(plainHeight, 44)
+        XCTAssertGreaterThanOrEqual(promptHeight, plainHeight)
+    }
+
     // MARK: - Helpers
 
     private func makeItem(

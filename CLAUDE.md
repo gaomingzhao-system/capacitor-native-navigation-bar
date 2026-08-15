@@ -144,10 +144,13 @@ The plugin only loads in Capacitor if these four names agree exactly:
 3. `@CapacitorPlugin(name = "NativeNavigation")` in the Java plugin class
 4. The iOS pod/SPM package/library name must equal `fixName("capacitor-native-navigation-bar")` = `CapacitorNativeNavigationBar`
 
-`scripts/check-wiring.mjs` asserts all of the above plus platform floors (iOS
-15.0, Android minSdk 24, `capacitor-swift-pm` pinned `from: "7.0.0"`,
+`scripts/check-wiring.mjs` asserts all of the above plus platform floors and
+build baselines (iOS 15.0, Android minSdk 30, SDK 36 fallbacks, Java 21, AGP
+8.13.2, Gradle 8.14.3, stable AndroidX fallbacks, ES2020,
+`capacitor-swift-pm` pinned `from: "7.0.0"`, and
 `peerDependencies` pinned to `^7.0.0`). It runs as part of `pnpm run lint`. If
-it fails, the plugin will silently not load in apps.
+it fails, the plugin may silently fail to load or drift from the documented
+release policy.
 
 ---
 
@@ -156,25 +159,22 @@ it fails, the plugin will silently not load in apps.
 | Platform | This plugin's floor | Capacitor 7's own floor | Consequence                                                                                                                                        |
 | -------- | ------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | iOS      | 15.0                | 14.0                    | apps on the Capacitor 7 template default (14.0) must raise their own Podfile/Xcode deployment target to 15.0                                       |
-| Android  | 24 (Android 7.0)    | 23                      | apps on the Capacitor 7 template default (23) must raise `minSdkVersion` in `variables.gradle` to 24                                               |
+| Android  | 30 (Android 11)     | 23                      | apps must use `minSdkVersion` 30, `compileSdkVersion` 36, and AGP 8.9.1+; the standalone baseline is AGP 8.13.2 / Gradle 8.14.3                    |
 | Node     | 22.13.0             | n/a (build-time only)   | only affects building this package from source; floor is pnpm 11.9.0's own minimum, not Node 22 LTS's launch version (22.11.0) — see `PLATFORM.md` |
 
 All iOS APIs newer than 15 must be behind `if #available(iOS …)`. All Android
-APIs newer than 24 must be behind `if (Build.VERSION.SDK_INT >= …)`. Do not
+APIs newer than 30 must be behind `if (Build.VERSION.SDK_INT >= …)`. Do not
 raise these floors further without updating `PLATFORM.md` and
-`check-wiring.mjs` together; do not lower them without checking whether that
-reintroduces a fixed defect (e.g. the pre-API-24 `List.removeIf`/`Stream`
-crash documented in `PLATFORM.md`).
+`check-wiring.mjs` together.
 
 **Enforcement differs by platform/toolchain — verified, not assumed:**
 
-- **Android**: `android/build.gradle`'s `minSdkVersion 24` is a **hard-coded
+- **Android**: `android/build.gradle`'s `minSdkVersion 30` is a **hard-coded
   literal**, not the usual `project.hasProperty(...) ? rootProject.ext... :
 fallback` pattern every other version in that file uses. That pattern was
   tried first and empirically found to let an embedding app's lower value
-  silently win with **no build error**, which would have reintroduced the
-  API-24-without-desugaring crash for any app that didn't already declare
-  `minSdkVersion = 24`. Do not "simplify" this back to the conditional form.
+  silently win with **no build error**, defeating this plugin's Android 11
+  support policy. Do not "simplify" this back to the conditional form.
 - **iOS SPM**: hard-fails the build on a deployment-target mismatch (verified).
 - **iOS CocoaPods**: does **not** fail the build on a mismatch (verified) —
   raising the app's Podfile target is a correctness recommendation, not a

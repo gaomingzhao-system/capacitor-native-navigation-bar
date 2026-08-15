@@ -15,7 +15,7 @@
 | Node.js（本パッケージのビルド用） | 22.13.0 以上 | 22.23.2 および現行 LTS の 24.19.0 で検証             |
 | TypeScript                        | 7.x          | ネイティブコンパイラー。[後述](#typescript-7) を参照 |
 | iOS デプロイメントターゲット      | 15.0         | Capacitor 7 自身の 14.0 より高い設定 — 後述          |
-| Android `minSdk`                  | 24（7.0）    | Capacitor 7 自身の 23 より高い設定 — 後述            |
+| Android `minSdk`                  | 30（11）     | Capacitor 7 自身の 23 より高い設定 — 後述            |
 
 このリリースには Capacitor 8 サポートは **含まれていません**。詳細は
 [1.x / Capacitor 7+8 リリースからの移行](#1x--capacitor-78-リリースからの移行)
@@ -43,9 +43,11 @@ platform version 15.0 for the iOS platform, but this target supports
     をリンクすることになります。
 - **Android**: Capacitor 7 のテンプレートは `android/variables.gradle` に
   `minSdkVersion = 23` を設定します。このプラグインをインストールする前に
-  **24** に引き上げてください。そうしないとマニフェストマージで失敗します
-  （`uses-sdk:minSdkVersion 23 cannot be smaller than version 24 declared in
-library`。検証済み）。
+  **30** に引き上げてください。そうしないとマニフェストマージで失敗します
+  （`uses-sdk:minSdkVersion 23 cannot be smaller than version 30 declared in
+library`）。さらに `compileSdkVersion = 36` と Android Gradle Plugin 8.9.1
+  以上が必要です。既定の AndroidX Core 1.18.0 が、この消費側最低条件を公開して
+  います。
 
 ## インストール
 
@@ -57,7 +59,7 @@ pnpm や bun も使用できます。Capacitor CLI はいずれのレイアウ�
 
 ### iOS
 
-- Xcode 15 以降が必要です。
+- Xcode 16 以降が必要です（Capacitor 7 のツールチェーン要件）。
 - 同期する前に、アプリの iOS デプロイメントターゲットを 15.0 に引き上げてください（上記参照）。
 - **CocoaPods:** それ以外の追加設定は不要 — `npx cap sync ios` が生成された Podfile に `pod 'CapacitorNativeNavigationBar'` を自動追加します。
 - **Swift Package Manager:** こちらも追加設定不要 — パッケージは `platforms: [.iOS(.v15)]` と、Capacitor 7 系のみに固定した `capacitor-swift-pm`（`from: "7.0.0"`）を宣言しているため、`cap sync` がピン留めした 7.x パッチバージョンに対して自動解決されます。
@@ -65,9 +67,13 @@ pnpm や bun も使用できます。Capacitor CLI はいずれのレイアウ�
 
 ### Android
 
-- JDK 21 が必要です（Capacitor 7 と同じ要件）。
-- 同期する前に、`android/variables.gradle` の `minSdkVersion` を 24 に引き上げてください（上記参照）。
-- それ以外は、モジュールはアプリの `variables.gradle` から `compileSdkVersion` と `targetSdkVersion` を読み取ります。スタンドアロンビルド時のフォールバックは Capacitor 7 自身のデフォルト（35）です。
+- JDK 21 を使用してください。
+- 同期する前に、`android/variables.gradle` で `minSdkVersion = 30` と
+  `compileSdkVersion = 36` を設定してください（上記参照）。
+- Android Gradle Plugin 8.9.1 以上を使用してください。このリポジトリの
+  スタンドアロン基準は AGP 8.13.2 / Gradle 8.14.3 です。
+  `targetSdkVersion` はアプリ側の値を読み取り、スタンドアロン時は API 36 へ
+  フォールバックします。
 - `load()` が `Window.setDecorFitsSystemWindows(false)` を呼び出し、ネイティブバーがシステムバー領域に描画できるようにします。これはアクティビティ全体に適用されます。
 
 ## 使い方
@@ -116,6 +122,14 @@ body {
    --cap-native-navbar-height, --cap-native-tabbar-height */
 ```
 
+値は Android の画面密度に依存せず、全プラットフォームで CSS pixel／native point
+単位です。`contentInsetMode: "none"` へ切り替えると、それ以前の `"css"` 設定が
+書き込んだ変数は削除されます。
+
+`configure`、`setNavbar`、`setTabbar` は差分更新です。省略したフィールドは、
+ネストした `colors`、`glass`、`style` を含めて以前の値を維持します。状態を消す
+場合は、空配列などの値を明示的に渡してください。
+
 ### ネイティブトランジション
 
 ルート変更をラップして、古いページのスナップショット上でネイティブアニメーションを再生します。
@@ -127,6 +141,9 @@ await NativeNavigation.finishTransition({ direction: "forward" });
 ```
 
 `beginZoomTransition(element)` / `finishZoomTransition(element)` は Apple Zoom スタイルのトランジションに使用します。ビューポート座標内の要素 rect を受け取ります。
+
+終了できるのは現在アクティブなトランジションだけです。明示した id が一致しない
+場合は、アクティブなスナップショットを壊さずに reject されます。
 
 `finishTransition` が呼び出されないまま終わってしまった場合（アプリ側のバグ、
 2 つの呼び出しの間で例外が発生した場合、あるいはトランジション中にアプリがバッ
@@ -162,7 +179,7 @@ await NativeNavigation.finishTransition({ direction: "forward" });
 ## プラットフォームごとの動作
 
 - **iOS 26+**: フローティングタブバーにシステムの Liquid Glass `UITabBarController` を使用し、カスタムカプセルには `UIGlassEffect` を使用します。iOS 15〜25 では `UIBlurEffect` マテリアルにフォールバックします。Liquid Glass パス全体はランタイムの `if #available` チェックで保護されているため、iOS 15 フロアでも問題なくコンパイル・動作します。
-- **Android 12+**: WebView の後ろに `RenderEffect` ブラーで `liquidGlass` エフェクトを描画します。Android 7〜11 は半透明サーフェスになります。
+- **Android 12+**: WebView の後ろに `RenderEffect` ブラーで `liquidGlass` エフェクトを描画します。Android 11 は半透明サーフェスにフォールバックします。
 - アイコンはインライン SVG（両プラットフォームでネイティブ描画）、SF Symbols、バンドル済み画像/drawable 名に対応しています。
 
 詳細なプラットフォームと OS 機能のサポートマトリクスは [PLATFORM.md](./PLATFORM.md) を参照してください。
@@ -215,7 +232,7 @@ pnpm run verify:android  # cd android && ./gradlew clean build test
 2. **Capacitor 7 のみ。** `peerDependencies` は `>=7.0.0 <10.0.0` から
    `^7.0.0` に変更されました。Capacitor 8 アプリは、Capacitor 8 サポートが
    別リリースとして提供されるまで、以前のリリースを使い続けてください。
-3. **ネイティブフロアの引き上げ。** iOS 15.0、Android API 24 — 上記の通りアプ
+3. **ネイティブフロアの引き上げ。** iOS 15.0、Android API 30 — 上記の通りアプ
    リ自身のフロアも引き上げてください。
 4. **本パッケージのビルドに Node.js 22.13.0 以上が必要です。** ソースからビル
    ドするコントリビューターにのみ影響します。公開済みの `dist/` はビルド時の
@@ -238,8 +255,8 @@ pnpm run verify:android  # cd android && ./gradlew clean build test
 | JavaScript 出力          | `dist/index.js` の ESM のみ                                                                                         | `module`・`main`・`unpkg` による ESM、CommonJS、IIFE/UMD                          |
 | ビルドツールチェーン     | TypeScript 7 ネイティブコンパイラー、`tsdown`、pnpm 11.9、Node.js 22.13 以上                                        | TypeScript 5.9、`tsc`、Rollup、Bun スクリプト、Node.js 22 以上                    |
 | iOS SwiftPM 依存関係     | `capacitor-swift-pm` の `7.0.0` 以上、product は `CapacitorNativeNavigationBar`                                     | `capacitor-swift-pm` の `8.0.0` 以上、product は `CapgoCapacitorNativeNavigation` |
-| Android ビルド基準       | フォールバック SDK 35、AGP 8.7.2、Java 17 バイトコード                                                              | フォールバック SDK 36、AGP 8.13.0、Java 21 バイトコード                           |
-| Android 最低 SDK         | `minSdkVersion 24` を固定して強制                                                                                   | ホスト側の `minSdkVersion` があれば継承し、未指定時は 24                          |
+| Android ビルド基準       | フォールバック SDK 36、AGP 8.13.2、Gradle 8.14.3、Java 21 言語／バイトコード                                        | フォールバック SDK 36、AGP 8.13.0、Gradle 8.14.3、Java 21 バイトコード            |
+| Android 最低 SDK         | `minSdkVersion 30` を固定して強制                                                                                   | ホスト側の `minSdkVersion` があれば継承し、未指定時は 24                          |
 | トランジション復旧       | iOS・Android のウォッチドッグと、バックグラウンド移行時の即時復旧                                                   | 現在のネイティブ実装に同等の復旧処理なし                                          |
 | Android のリサイズと解放 | content root のサイズ変更時に再レイアウトし、destroy 時にビュー／リスナーを削除し、トランジション Bitmap を recycle | 対応する root サイズ監視、teardown、トランジション Bitmap の明示的 recycle なし   |
 

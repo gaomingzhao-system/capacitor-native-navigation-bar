@@ -16,6 +16,12 @@ final class NativeTabItem {
     final String title;
     final Drawable icon;
     final Drawable selectedIcon;
+    final boolean iconTemplate;
+    final boolean selectedIconTemplate;
+    final int iconWidthDp;
+    final int iconHeightDp;
+    final int selectedIconWidthDp;
+    final int selectedIconHeightDp;
     final String badge;
     final boolean enabled;
     final boolean detachedTrailing;
@@ -26,6 +32,12 @@ final class NativeTabItem {
         String title,
         Drawable icon,
         Drawable selectedIcon,
+        boolean iconTemplate,
+        boolean selectedIconTemplate,
+        int iconWidthDp,
+        int iconHeightDp,
+        int selectedIconWidthDp,
+        int selectedIconHeightDp,
         String badge,
         boolean enabled,
         boolean detachedTrailing,
@@ -35,6 +47,12 @@ final class NativeTabItem {
         this.title = title;
         this.icon = icon;
         this.selectedIcon = selectedIcon;
+        this.iconTemplate = iconTemplate;
+        this.selectedIconTemplate = selectedIconTemplate;
+        this.iconWidthDp = iconWidthDp;
+        this.iconHeightDp = iconHeightDp;
+        this.selectedIconWidthDp = selectedIconWidthDp;
+        this.selectedIconHeightDp = selectedIconHeightDp;
         this.badge = badge;
         this.enabled = enabled;
         this.detachedTrailing = detachedTrailing;
