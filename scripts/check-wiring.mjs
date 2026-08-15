@@ -82,7 +82,7 @@ const androidPlugin = read(
   "android/src/main/java/app/nativenavigationbar/capacitor/NativeNavigationPlugin.java",
 );
 const javaName = match(
-  androidSlugin,
+  androidPlugin,
   /@CapacitorPlugin\(name = "([^"]+)"\)/,
   "Android @CapacitorPlugin",
 );
@@ -203,7 +203,7 @@ check(
   "Android Gradle Plugin classpath fallback",
   match(
     androidBuild,
-    /classpath\s+"com\.android\.tools\.build:gradle:\$\{[^}]*:\s*'([^']+)'\}"/,
+    /classpath\s+"com\.android\.tools.build:gradle:\$\{[^}]*:*\s*'([^']+)'\}"/,
     "AGP classpath fallback",
   ),
   "8.13.2",
