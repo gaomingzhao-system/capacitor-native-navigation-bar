@@ -1,3 +1,12 @@
+// The plugin module is also the root project during standalone CI builds.
+// Publish the SDK values on the root so the included capacitor-android project
+// does not silently fall back to compileSdk/targetSdk 35 and minSdk 23.
+if (rootProject == project) {
+    rootProject.ext.compileSdkVersion = 36
+    rootProject.ext.targetSdkVersion = 36
+    rootProject.ext.minSdkVersion = 30
+}
+
 ext {
     junitVersion = project.hasProperty('junitVersion') ? rootProject.ext.junitVersion : '4.13.2'
     // AppCompat 1.7.1 is the latest stable release. Do not use an unreleased

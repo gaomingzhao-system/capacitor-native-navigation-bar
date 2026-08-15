@@ -17,9 +17,9 @@
 | iOS デプロイメントターゲット      | 15.0         | Capacitor 7 自身の 14.0 より高い設定 — 後述          |
 | Android `minSdk`                  | 30（11）     | Capacitor 7 自身の 23 より高い設定 — 後述            |
 
-このリリースには Capacitor 8 サポートは **含まれていません**。詳細は
-[1.x / Capacitor 7+8 リリースからの移行](#1x--capacitor-78-リリースからの移行)
-を参照してください。
+バージョン **7.2.0** が最初の npm 公開版です。パッケージのメジャー
+バージョンは対応する Capacitor のメジャーに合わせるため、このリリース系列は
+Capacitor 7 のみをサポートします。
 
 ### アプリ側のフロアもこのプラグインのフロアに合わせる必要があります
 
@@ -221,28 +221,12 @@ pnpm run verify:android  # cd android && ./gradlew clean build test
 
 `pnpm run verify:ios:test` で iOS シミュレーター上の Swift ユニットテストを実行します。
 
-## 1.x / Capacitor 7+8 リリースからの移行
+## バージョニング
 
-本リリース（2.0.0）は、以前の「Capacitor 二重サポート・二重モジュール形式」
-リリースからの意図的な破壊的変更です。
-
-1. **ESM のみ。** ビルドツールが純粋な ESM 依存関係（`require()` 不可、
-   IIFE/CDN バンドルなし）を扱えない場合は、ツールチェーンを更新できるまで
-   以前のリリースを使い続けてください。
-2. **Capacitor 7 のみ。** `peerDependencies` は `>=7.0.0 <10.0.0` から
-   `^7.0.0` に変更されました。Capacitor 8 アプリは、Capacitor 8 サポートが
-   別リリースとして提供されるまで、以前のリリースを使い続けてください。
-3. **ネイティブフロアの引き上げ。** iOS 15.0、Android API 30 — 上記の通りアプ
-   リ自身のフロアも引き上げてください。
-4. **本パッケージのビルドに Node.js 22.13.0 以上が必要です。** ソースからビル
-   ドするコントリビューターにのみ影響します。公開済みの `dist/` はビルド時の
-   Node.js バージョンの影響を受けません（Node 22 LTS 自体は 22.11.0 から開始
-   しますが、追加の 2 パッチバージョンは pnpm 11.9.0 自身の最小要件です。詳細
-   は [PLATFORM.md](./PLATFORM.md) を参照してください）。
-
-プラグイン自体の公開 API は変更されていません。`NativeNavigation` ブリッジ名、
-すべてのメソッド名、オプション/イベントの形状、カスタム要素名、CSS 変数名は
-以前のリリースと同一です。
+バージョン **7.2.0** は `capacitor-native-navigation-bar` の最初の npm 公開版です。
+このパッケージ名では、以前の `1.x`・`2.x` 公開版は存在しません。メジャー
+バージョンは対応する Capacitor のメジャーに合わせます。`7.x` は Capacitor 7、
+将来の Capacitor 8 対応は別の `8.x` リリース系列として提供します。
 
 ## [`@capgo/capacitor-native-navigation`](https://github.com/Cap-go/capacitor-native-navigation) との技術比較
 

@@ -31,10 +31,7 @@ const makeBridge = () => {
     finishTransition: vi.fn(async () => ({ id: "transition", direction: "forward", duration: 0 })),
     getPluginVersion: vi.fn(async () => ({ version: "test" })),
     addListener: vi.fn(
-      async (
-        eventName: string,
-        listener: (event: NativeNavigationTabSelectEvent) => void,
-      ) => {
+      async (eventName: string, listener: (event: NativeNavigationTabSelectEvent) => void) => {
         if (eventName === "tabSelect") tabSelectListener = listener;
         return { remove: async () => undefined };
       },
