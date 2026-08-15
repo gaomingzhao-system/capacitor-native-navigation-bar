@@ -5,8 +5,11 @@ on:
     branches: [main]
   pull_request:
 
-# Cancel superseded runs on the same ref so pushing a fixup doesn't queue
-# behind (or race) the run it replaces.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref so pushing a fixup does not queue
+# behind, or race with, the run it replaces.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -15,20 +18,22 @@ jobs:
   web:
     name: Web (lint, test, build, package)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.9.0
-      # Node.js 22 LTS is this package's declared floor (see .node-version /
-      # package.json engines). CI intentionally builds on the floor, not just
-      # whatever is newest, so a regression against the documented minimum is
-      # caught here instead of by a consumer.
-      - uses: actions/setup-node@v4
+      # Build against the declared Node.js floor instead of only the newest LTS.
+      - uses: actions/setup-node@v7
         with:
           node-version-file: ".node-version"
-          cache: "pnpm"
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Verify formatting and show any required diff
+        run: |
+          pnpm run fmt
+          git diff --exit-code
       - run: pnpm run lint
       - run: pnpm run test
       - run: pnpm run build
@@ -37,8 +42,9 @@ jobs:
   ios:
     name: iOS (SPM build + Swift tests)
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build (generic iOS destination)
         run: xcodebuild -scheme CapacitorNativeNavigationBar -destination "generic/platform=iOS" build
       - name: Resolve an available iOS Simulator
@@ -46,9 +52,8 @@ jobs:
         run: |
           udid=$(xcrun simctl list devices available --json \
             | python3 -c "import json,sys; data=json.load(sys.stdin)['devices']; \
-              rt=[k for k in data if 'iOS' in k]; \
-              rt.sort(reverse=True); \
-              print(next(d['udid'] for r in rt for d in data[r] if d['name'].startswith('iPhone')))")
+              runtimes=sorted((key for key in data if 'iOS' in key), reverse=True); \
+              print(next(device['udid'] for runtime in runtimes for device in data[runtime] if device['name'].startswith('iPhone')))")
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
       - name: Run Swift unit tests
         run: xcodebuild test -scheme CapacitorNativeNavigationBar -destination "id=${{ steps.sim.outputs.udid }}"
@@ -56,31 +61,30 @@ jobs:
   android:
     name: Android (standalone Gradle build + JUnit tests)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.9.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: ".node-version"
-          cache: "pnpm"
+          cache: pnpm
       # Populates node_modules/@capacitor/android, which android/settings.gradle
-      # includes as the ':capacitor-android' project — required before Gradle
-      # can resolve this module on its own, mirroring how a real Capacitor app
-      # wires the plugin in.
+      # includes as the ':capacitor-android' project.
       - run: pnpm install --frozen-lockfile
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
-      - name: gradlew clean build test
+      - name: Build Android library and run tests
         working-directory: android
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod +x gradlew
           ./gradlew clean build test --no-daemon
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: android-test-results

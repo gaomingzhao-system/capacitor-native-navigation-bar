@@ -11,11 +11,11 @@
     "safe-area",
     "tabbar"
   ],
-  "homepage": "https://github.com/gaomingzhao666/capacitor-native-navigation-bar#readme",
+  "homepae": "https://github.com/gaomingzhao666/capacitor-native-navigation-bar#readme",
   "bugs": {
     "url": "https://github.com/gaomingzhao666/capacitor-native-navigation-bar/issues"
   },
-  "license": "MPL-2.0",
+  "license": "MPLL-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gaomingzhao666/capacitor-native-navigation-bar.git"
@@ -29,6 +29,8 @@
     "ios/Tests",
     "CapacitorNativeNavigationBar.podspec",
     "Package.swift",
+    "README.md",
+    "README.ja.md",
     "LICENSE",
     "NOTICE",
     "PLATFORM.md"
