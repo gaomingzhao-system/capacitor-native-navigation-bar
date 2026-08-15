@@ -9,11 +9,13 @@
 package app.nativenavigationbar.capacitor;
 
 import android.app.Activity;
+import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -21,10 +23,10 @@ import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -48,10 +50,14 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -61,9 +67,26 @@ public class NativeNavigationPlugin extends Plugin {
     private static final int DEFAULT_NAVBAR_DP = 56;
     private static final int DEFAULT_TABBAR_DP = 64;
     private static final int DEFAULT_TRANSITION_MS = 350;
+    private static final int MAX_TRANSITION_MS = 60_000;
+    private static final int TRANSITION_WATCHDOG_GRACE_MS = 4_000;
+    private static final int MAX_SNAPSHOT_PIXELS = 8_388_608;
+    private static final int MAX_LAYOUT_DP = 2_048;
+    private static final double MAX_TRANSITION_COORDINATE_DP = 1_000_000d;
     private static final int MENU_ITEM_BASE = 10_000;
     private static final int DEFAULT_TABBAR_BACKGROUND_COLOR = Color.WHITE;
+    private static final int DEFAULT_TINT_COLOR = Color.rgb(0, 122, 255);
+    private static final int DEFAULT_INACTIVE_TINT_COLOR = Color.rgb(120, 126, 137);
     private static final int DETACHED_TRAILING_GAP_DP = 10;
+    private static final int MAX_INLINE_IMAGE_CHARACTERS = SvgIconRenderer.MAX_SVG_CHARACTERS * 2;
+    private static final String[] CSS_INSET_VARIABLES = {
+        "--cap-native-navigation-top",
+        "--cap-native-navigation-right",
+        "--cap-native-navigation-bottom",
+        "--cap-native-navigation-left",
+        "--cap-native-navbar-height",
+        "--cap-native-tabbar-height",
+    };
+    private static final AtomicLong TRANSITION_SEQUENCE = new AtomicLong();
 
     private final NativeNavigation implementation = new NativeNavigation();
     private FrameLayout navbarContainer;
@@ -75,8 +98,14 @@ public class NativeNavigationPlugin extends Plugin {
     private View navbarGlassSurface;
     private GlassBackdropView tabbarGlassBackdrop;
     private View tabbarGlassSurface;
-    private ImageView transitionSnapshot;
-    private Bitmap transitionSnapshotBitmap;
+    private final JSObject configState = new JSObject()
+        .put("enabled", true)
+        .put("contentInsetMode", "css")
+        .put("platformStyle", "auto");
+    private final JSObject navbarState = new JSObject();
+    private final JSObject tabbarState = new JSObject();
+    private boolean navbarStateInitialized;
+    private boolean tabbarStateInitialized;
     private boolean enabled = true;
     private boolean navbarVisible = false;
     private boolean tabbarVisible = false;
@@ -84,26 +113,21 @@ public class NativeNavigationPlugin extends Plugin {
     private GlassOptions defaultGlassOptions = GlassOptions.defaults();
     private GlassOptions navbarGlassOptions = GlassOptions.defaults();
     private GlassOptions tabbarGlassOptions = GlassOptions.defaults();
-    private JSObject navbarGlassConfig;
-    private JSObject tabbarGlassConfig;
     private int defaultTransitionMs = DEFAULT_TRANSITION_MS;
-    private int activeTransitionMs = DEFAULT_TRANSITION_MS;
     private int tintColor = Color.rgb(0, 122, 255);
     private int inactiveTintColor = Color.rgb(120, 126, 137);
     private int navbarBackgroundColor = Color.argb(225, 255, 255, 255);
     private int tabbarBackgroundColor = Color.argb(235, 255, 255, 255);
     private int badgeBackgroundColor = Color.rgb(255, 59, 48);
     private int badgeTextColor = Color.WHITE;
+    private boolean disableIndicator = false;
+    private int indicatorColor = Color.argb(34, 0, 122, 255);
+    private int rippleColor = Color.argb(40, 0, 122, 255);
     private TabbarStyle tabbarStyle = TabbarStyle.defaults(Color.rgb(0, 122, 255));
-    private String activeTransitionId;
-    private String activeTransitionDirection = "forward";
-    private RectF activeZoomSourceFrame;
-    private float activeZoomCornerRadius = 0f;
-    private Drawable activeTransitionRootBackground;
-    private boolean activeTransitionRootBackgroundCaptured = false;
     private final Map<Integer, String> menuActionIds = new HashMap<>();
     private final Map<Integer, String> menuActionTitles = new HashMap<>();
     private final Map<Integer, String> menuActionPlacements = new HashMap<>();
+    private final Map<Integer, Boolean> menuActionTemplates = new HashMap<>();
     private final List<NativeTabItem> tabItems = new ArrayList<>();
     private int selectedTabIndex = 0;
 
@@ -116,11 +140,38 @@ public class NativeNavigationPlugin extends Plugin {
      * finishes normally, and also fired immediately from `handleOnPause`.
      */
     private final Handler transitionWatchdogHandler = new Handler(Looper.getMainLooper());
-    private Runnable transitionWatchdogRunnable;
+    private TransitionSession activeTransition;
 
     private int lastRootWidth = -1;
     private int lastRootHeight = -1;
     private View observedRoot;
+    private View insetsObserverView;
+    private Insets lastSystemInsets = Insets.NONE;
+    private boolean hasReceivedWindowInsets;
+    private boolean insetsUpdatePending;
+
+    private static final class TransitionSession {
+
+        final String id;
+        String direction;
+        int durationMs;
+        RectF zoomSourceFrame;
+        float zoomCornerRadiusPx;
+        ImageView snapshot;
+        Bitmap bitmap;
+        Drawable rootBackground;
+        boolean rootBackgroundCaptured;
+        Runnable watchdog;
+        Runnable delayedCompletion;
+        PluginCall finishCall;
+        boolean completed;
+
+        TransitionSession(String id, String direction, int durationMs) {
+            this.id = id;
+            this.direction = direction;
+            this.durationMs = durationMs;
+        }
+    }
 
     /*
      * Capacitor's BridgeActivity absorbs orientation and screen-size configuration
@@ -177,9 +228,9 @@ public class NativeNavigationPlugin extends Plugin {
         // watching matters anymore, so force-complete it immediately rather
         // than leaving the WebView at alpha 0.01f for whenever the activity
         // happens to resume.
-        String id = activeTransitionId;
-        if (id != null) {
-            runOnUiThread(() -> recoverStuckTransition(id));
+        TransitionSession session = activeTransition;
+        if (session != null) {
+            runOnUiThread(() -> recoverStuckTransition(session));
         }
         super.handleOnPause();
     }
@@ -187,33 +238,25 @@ public class NativeNavigationPlugin extends Plugin {
     @PluginMethod
     public void configure(PluginCall call) {
         runOnUiThread(() -> {
-            enabled = call.getBoolean("enabled", true);
-            contentInsetMode = call.getString("contentInsetMode", contentInsetMode);
-            defaultGlassOptions = GlassOptions.from(call.getObject("glass", null), defaultGlassOptions);
-            navbarGlassOptions = GlassOptions.from(navbarGlassConfig, defaultGlassOptions);
-            tabbarGlassOptions = GlassOptions.from(tabbarGlassConfig, defaultGlassOptions);
-            Double duration = call.getDouble("animationDuration");
-            if (duration != null) {
-                defaultTransitionMs = Math.max(0, duration.intValue());
+            Double requestedDuration = call.getDouble("animationDuration");
+            if (requestedDuration != null && !isValidTransitionDuration(requestedDuration)) {
+                call.reject("animationDuration must be finite and between 0 and " + MAX_TRANSITION_MS + " milliseconds");
+                return;
             }
+            mergeState(configState, call.getData(), "colors", "glass");
+            enabled = configState.optBoolean("enabled", true);
+            contentInsetMode = "none".equals(configState.optString("contentInsetMode", "css")) ? "none" : "css";
+            defaultGlassOptions = GlassOptions.from(configState.optJSONObject("glass"), GlassOptions.defaults());
+            if (configState.has("animationDuration")) {
+                defaultTransitionMs = validatedTransitionDuration(configState.optDouble("animationDuration", DEFAULT_TRANSITION_MS));
+            }
+            navbarGlassOptions = GlassOptions.from(navbarState.optJSONObject("glass"), defaultGlassOptions);
+            tabbarGlassOptions = GlassOptions.from(tabbarState.optJSONObject("glass"), defaultGlassOptions);
             if (!enabled) {
-                navbarVisible = false;
-                tabbarVisible = false;
-                if (navbarContainer != null) {
-                    navbarContainer.setVisibility(View.GONE);
-                }
-                if (tabbar != null) {
-                    tabbar.setVisibility(View.GONE);
-                }
-                if (tabbarContainer != null) {
-                    tabbarContainer.setVisibility(View.GONE);
-                }
-                if (tabbarBackdrop != null) {
-                    tabbarBackdrop.setVisibility(View.GONE);
-                }
-            }
-            if (enabled) {
-                reapplyVisibleChromeBackgrounds();
+                hideChromeForDisabledState();
+            } else if (!applyNavbarState() || !applyTabbarState()) {
+                call.reject("Activity unavailable");
+                return;
             }
             updateInsetsAndNotify();
             call.resolve(insetsResult());
@@ -223,54 +266,18 @@ public class NativeNavigationPlugin extends Plugin {
     @PluginMethod
     public void setNavbar(PluginCall call) {
         runOnUiThread(() -> {
+            mergeState(navbarState, call.getData(), "colors", "glass");
+            navbarStateInitialized = true;
             if (!enabled) {
-                navbarVisible = false;
+                hideNavbarViews();
                 updateInsetsAndNotify();
                 call.resolve(insetsResult());
                 return;
             }
-
-            boolean hidden = call.getBoolean("hidden", false);
-            navbarVisible = !hidden;
-            if (hidden) {
-                if (navbarContainer != null) {
-                    navbarContainer.setVisibility(View.GONE);
-                }
-                updateInsetsAndNotify();
-                call.resolve(insetsResult());
-                return;
-            }
-
-            Toolbar nativeToolbar = ensureToolbar();
-            if (nativeToolbar == null) {
+            if (!applyNavbarState()) {
                 call.reject("Activity unavailable");
                 return;
             }
-            nativeToolbar.setTitle(call.getString("title", ""));
-            nativeToolbar.setSubtitle(call.getString("subtitle", null));
-            nativeToolbar.getMenu().clear();
-            menuActionIds.clear();
-            menuActionTitles.clear();
-            menuActionPlacements.clear();
-
-            JSObject backButton = call.getObject("backButton", null);
-            if (backButton != null && Boolean.TRUE.equals(backButton.getBool("visible"))) {
-                nativeToolbar.setNavigationIcon(androidx.appcompat.R.drawable.abc_ic_ab_back_material);
-                nativeToolbar.setNavigationContentDescription(backButton.getString("title", "Back"));
-                nativeToolbar.setNavigationOnClickListener(v -> notifyListeners("navbarBack", new JSObject().put("source", "navbar")));
-            } else {
-                nativeToolbar.setNavigationIcon(null);
-                nativeToolbar.setNavigationOnClickListener(null);
-                addToolbarItems(nativeToolbar, call.getArray("leftItems", new JSArray()), "left");
-            }
-
-            addToolbarItems(nativeToolbar, call.getArray("rightItems", new JSArray()), "right");
-            JSObject colors = call.getObject("colors", new JSObject());
-            navbarGlassConfig = call.getObject("glass", null);
-            navbarGlassOptions = GlassOptions.from(navbarGlassConfig, defaultGlassOptions);
-            applyToolbarColors(nativeToolbar, colors);
-            navbarContainer.setVisibility(View.VISIBLE);
-            layoutChrome();
             updateInsetsAndNotify();
             call.resolve(insetsResult());
         });
@@ -279,118 +286,287 @@ public class NativeNavigationPlugin extends Plugin {
     @PluginMethod
     public void setTabbar(PluginCall call) {
         runOnUiThread(() -> {
+            mergeState(tabbarState, call.getData(), "colors", "glass", "style");
+            tabbarStateInitialized = true;
             if (!enabled) {
-                tabbarVisible = false;
+                hideTabbarViews();
                 updateInsetsAndNotify();
                 call.resolve(insetsResult());
                 return;
             }
-
-            boolean hidden = call.getBoolean("hidden", false);
-            tabbarVisible = !hidden;
-            if (hidden) {
-                if (tabbar != null) {
-                    tabbar.setVisibility(View.GONE);
-                }
-                if (tabbarContainer != null) {
-                    tabbarContainer.setVisibility(View.GONE);
-                }
-                if (tabbarBackdrop != null) {
-                    tabbarBackdrop.setVisibility(View.GONE);
-                }
-                updateInsetsAndNotify();
-                call.resolve(insetsResult());
-                return;
-            }
-
-            NativeTabbarLayout nativeTabbar = ensureTabbar();
-            if (nativeTabbar == null) {
+            if (!applyTabbarState()) {
                 call.reject("Activity unavailable");
                 return;
             }
-            nativeTabbar.removeAllViews();
-            tabItems.clear();
-            selectedTabIndex = -1;
-
-            boolean labels = call.getBoolean("labels", true);
-            boolean icons = call.getBoolean("icons", true);
-            String labelVisibilityMode = call.getString("labelVisibilityMode", labels ? "labeled" : "unlabeled");
-            JSONArray tabs = call.getArray("tabs", new JSArray());
-            String selectedId = call.getString("selectedId", null);
-            JSObject colors = call.getObject("colors", new JSObject());
-            tabbarGlassConfig = call.getObject("glass", null);
-            tabbarGlassOptions = GlassOptions.from(tabbarGlassConfig, defaultGlassOptions);
-            badgeBackgroundColor = colorOption(call, colors, "badgeBackgroundColor", "badgeBackground", Color.rgb(255, 59, 48));
-            badgeTextColor = colorOption(call, colors, "badgeTextColor", "badgeText", Color.WHITE);
-
-            for (int sourceIndex = 0; sourceIndex < tabs.length(); sourceIndex++) {
-                JSONObject tab = tabs.optJSONObject(sourceIndex);
-                if (tab == null) {
-                    continue;
-                }
-                String id = tab.optString("id", "tab-" + sourceIndex);
-                boolean isHidden = tab.optBoolean("hidden", false);
-                if (isHidden && !id.equals(selectedId)) {
-                    continue;
-                }
-
-                String title = tab.optString("title", "");
-                Drawable icon = icons ? iconFrom(tab.optJSONObject("icon")) : new ColorDrawable(Color.TRANSPARENT);
-                Drawable selectedIcon = icons ? iconFrom(tab.optJSONObject("selectedIcon")) : null;
-                // `tab.has("badge")` is also true for an explicit JSON null, which
-                // upstream turned into the literal badge text "null".
-                String badge = tab.has("badge") && !tab.isNull("badge") ? String.valueOf(tab.opt("badge")) : null;
-                String role = tab.optString("role", "normal");
-                boolean detachedTrailing = "search".equalsIgnoreCase(role) || "prominent".equalsIgnoreCase(role);
-                tabItems.add(
-                    new NativeTabItem(id, title, icon, selectedIcon, badge, tab.optBoolean("enabled", true), detachedTrailing, sourceIndex)
-                );
-            }
-
-            applyTabbarColors(call, colors);
-            tabbarStyle = makeTabbarStyle(call.getObject("style", new JSObject()));
-
-            // Keep at most one detached trailing action for floating bars.
-            // Curve bars ignore role so tab order / center selection stay stable.
-            if (!tabbarStyle.isCurve()) {
-                moveLastDetachedTrailingItemToEnd();
-            }
-            for (int index = 0; index < tabItems.size(); index++) {
-                if (tabItems.get(index).id.equals(selectedId)) {
-                    selectedTabIndex = index;
-                    break;
-                }
-            }
-
-            if (tabItems.isEmpty()) {
-                tabbarVisible = false;
-                if (tabbarContainer != null) {
-                    tabbarContainer.setVisibility(View.GONE);
-                }
-                nativeTabbar.setVisibility(View.GONE);
-                layoutChrome();
-                updateInsetsAndNotify();
-                call.resolve(insetsResult());
-                return;
-            }
-
-            if (selectedTabIndex < 0 || selectedTabIndex >= tabItems.size()) {
-                selectedTabIndex = 0;
-            }
-
-            applyTabbarBackground(centerTabIndex());
-            renderTabbarItems(labelVisibilityMode, icons);
-            if (tabbarContainer != null) {
-                tabbarContainer.setVisibility(View.VISIBLE);
-            }
-            if (tabbarBackdrop != null) {
-                tabbarBackdrop.setVisibility(View.VISIBLE);
-            }
-            nativeTabbar.setVisibility(View.VISIBLE);
-            layoutChrome();
             updateInsetsAndNotify();
             call.resolve(insetsResult());
         });
+    }
+
+    private boolean applyNavbarState() {
+        if (!navbarStateInitialized) {
+            hideNavbarViews();
+            return true;
+        }
+        navbarVisible = NativeVisibilityState.isVisible(navbarStateInitialized, enabled, navbarState.opt("hidden"));
+        if (!navbarVisible) {
+            hideNavbarViews();
+            return true;
+        }
+
+        Toolbar nativeToolbar = ensureToolbar();
+        if (nativeToolbar == null) {
+            navbarVisible = false;
+            return false;
+        }
+        nativeToolbar.setTitle(navbarState.optString("title", ""));
+        nativeToolbar.setSubtitle(nullableString(navbarState, "subtitle"));
+        nativeToolbar.getMenu().clear();
+        menuActionIds.clear();
+        menuActionTitles.clear();
+        menuActionPlacements.clear();
+        menuActionTemplates.clear();
+
+        JSONObject backButton = navbarState.optJSONObject("backButton");
+        if (backButton != null && backButton.optBoolean("visible", false)) {
+            nativeToolbar.setNavigationIcon(androidx.appcompat.R.drawable.abc_ic_ab_back_material);
+            nativeToolbar.setNavigationContentDescription(backButton.optString("title", "Back"));
+            nativeToolbar.setNavigationOnClickListener(v -> emitEvent("navbarBack", new JSObject().put("source", "navbar")));
+        } else {
+            nativeToolbar.setNavigationIcon(null);
+            nativeToolbar.setNavigationOnClickListener(null);
+            addToolbarItems(nativeToolbar, arrayOrEmpty(navbarState, "leftItems"), "left");
+        }
+        addToolbarItems(nativeToolbar, arrayOrEmpty(navbarState, "rightItems"), "right");
+
+        JSObject colors = mergedObject(configState.optJSONObject("colors"), navbarState.optJSONObject("colors"));
+        navbarGlassOptions = GlassOptions.from(navbarState.optJSONObject("glass"), defaultGlassOptions);
+        applyToolbarColors(nativeToolbar, colors);
+        navbarContainer.setVisibility(View.VISIBLE);
+        return true;
+    }
+
+    private boolean applyTabbarState() {
+        if (!tabbarStateInitialized) {
+            hideTabbarViews();
+            return true;
+        }
+        tabbarVisible = NativeVisibilityState.isVisible(tabbarStateInitialized, enabled, tabbarState.opt("hidden"));
+        if (!tabbarVisible) {
+            hideTabbarViews();
+            return true;
+        }
+
+        NativeTabbarLayout nativeTabbar = ensureTabbar();
+        if (nativeTabbar == null) {
+            tabbarVisible = false;
+            return false;
+        }
+        nativeTabbar.removeAllViews();
+        tabItems.clear();
+        selectedTabIndex = -1;
+
+        boolean labels = tabbarState.optBoolean("labels", true);
+        boolean icons = tabbarState.optBoolean("icons", true);
+        String labelVisibilityMode = tabbarState.optString("labelVisibilityMode", labels ? "labeled" : "unlabeled");
+        JSONArray tabs = arrayOrEmpty(tabbarState, "tabs");
+        String selectedId = nullableString(tabbarState, "selectedId");
+        JSObject colors = mergedObject(configState.optJSONObject("colors"), tabbarState.optJSONObject("colors"));
+        tabbarGlassOptions = GlassOptions.from(tabbarState.optJSONObject("glass"), defaultGlassOptions);
+        applyTabbarColors(tabbarState, colors);
+        tabbarStyle = makeTabbarStyle(objectOrEmpty(tabbarState, "style"));
+        badgeBackgroundColor = colorOption(
+            tabbarState,
+            colors,
+            "badgeBackgroundColor",
+            "badgeBackground",
+            Color.rgb(255, 59, 48)
+        );
+        badgeTextColor = colorOption(tabbarState, colors, "badgeTextColor", "badgeText", Color.WHITE);
+        disableIndicator = tabbarState.optBoolean("disableIndicator", false);
+        indicatorColor = colorOption(tabbarState, colors, "indicatorColor", "indicator", withAlpha(tintColor, 34));
+        rippleColor = colorOption(tabbarState, colors, "rippleColor", "ripple", withAlpha(tintColor, 40));
+
+        int lastDetachedSourceIndex = lastVisibleDetachedSourceIndex(tabs, selectedId);
+        for (int sourceIndex = 0; sourceIndex < tabs.length(); sourceIndex++) {
+            JSONObject rawTab = tabs.optJSONObject(sourceIndex);
+            if (rawTab == null) {
+                continue;
+            }
+            String id = rawTab.optString("id", "tab-" + sourceIndex);
+            boolean isHidden = rawTab.optBoolean("hidden", false);
+            if (isHidden && !id.equals(selectedId)) {
+                continue;
+            }
+
+            JSONObject iconDescriptor = rawTab.optJSONObject("icon");
+            JSONObject selectedIconDescriptor = rawTab.optJSONObject("selectedIcon");
+            Drawable icon = icons ? iconFrom(iconDescriptor) : null;
+            Drawable selectedIcon = icons ? iconFrom(selectedIconDescriptor) : null;
+            String badge = rawTab.has("badge") && !rawTab.isNull("badge") ? String.valueOf(rawTab.opt("badge")) : null;
+            boolean detachedTrailing = !tabbarStyle.isCurve() && sourceIndex == lastDetachedSourceIndex;
+            tabItems.add(
+                new NativeTabItem(
+                    id,
+                    rawTab.optString("title", ""),
+                    icon,
+                    selectedIcon,
+                    iconTemplate(iconDescriptor),
+                    iconTemplate(selectedIconDescriptor),
+                    iconWidthDp(iconDescriptor),
+                    iconHeightDp(iconDescriptor),
+                    iconWidthDp(selectedIconDescriptor),
+                    iconHeightDp(selectedIconDescriptor),
+                    badge,
+                    rawTab.optBoolean("enabled", true),
+                    detachedTrailing,
+                    sourceIndex
+                )
+            );
+        }
+        NativeItemOrder.moveLastMatchingToEnd(tabItems, item -> item.detachedTrailing);
+
+        for (int index = 0; index < tabItems.size(); index++) {
+            if (tabItems.get(index).id.equals(selectedId)) {
+                selectedTabIndex = index;
+                break;
+            }
+        }
+        if (tabItems.isEmpty()) {
+            hideTabbarViews();
+            return true;
+        }
+        if (selectedTabIndex < 0 || selectedTabIndex >= tabItems.size()) {
+            selectedTabIndex = firstEnabledTabIndex();
+        }
+
+        renderTabbarItems(labelVisibilityMode, icons);
+        if (tabbarContainer != null) {
+            tabbarContainer.setVisibility(View.VISIBLE);
+        }
+        if (tabbarBackdrop != null) {
+            tabbarBackdrop.setVisibility(View.VISIBLE);
+        }
+        nativeTabbar.setVisibility(View.VISIBLE);
+        return true;
+    }
+
+    private void hideChromeForDisabledState() {
+        hideNavbarViews();
+        hideTabbarViews();
+    }
+
+    private void hideNavbarViews() {
+        navbarVisible = false;
+        if (navbarContainer != null) {
+            navbarContainer.setVisibility(View.GONE);
+        }
+    }
+
+    private void hideTabbarViews() {
+        tabbarVisible = false;
+        if (tabbar != null) {
+            tabbar.setVisibility(View.GONE);
+        }
+        if (tabbarContainer != null) {
+            tabbarContainer.setVisibility(View.GONE);
+        }
+        if (tabbarBackdrop != null) {
+            tabbarBackdrop.setVisibility(View.GONE);
+        }
+    }
+
+    private int firstEnabledTabIndex() {
+        for (int index = 0; index < tabItems.size(); index++) {
+            if (tabItems.get(index).enabled) {
+                return index;
+            }
+        }
+        return 0;
+    }
+
+    private int lastVisibleDetachedSourceIndex(JSONArray tabs, String selectedId) {
+        for (int index = tabs.length() - 1; index >= 0; index--) {
+            JSONObject tab = tabs.optJSONObject(index);
+            if (tab == null) {
+                continue;
+            }
+            String id = tab.optString("id", "tab-" + index);
+            if (tab.optBoolean("hidden", false) && !id.equals(selectedId)) {
+                continue;
+            }
+            String role = tab.optString("role", "normal");
+            if ("search".equalsIgnoreCase(role) || "prominent".equalsIgnoreCase(role)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private void mergeState(JSObject state, JSObject patch, String... nestedKeys) {
+        if (patch == null) {
+            return;
+        }
+        Iterator<String> keys = patch.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            Object value = patch.opt(key);
+            if (isNestedKey(key, nestedKeys) && value instanceof JSONObject) {
+                state.put(key, mergedObject(state.optJSONObject(key), (JSONObject) value));
+            } else if (value == JSONObject.NULL) {
+                if (!isNestedKey(key, nestedKeys)) {
+                    state.put(key, JSONObject.NULL);
+                }
+            } else if (value != null) {
+                state.put(key, value);
+            }
+        }
+    }
+
+    private boolean isNestedKey(String key, String... nestedKeys) {
+        for (String nestedKey : nestedKeys) {
+            if (nestedKey.equals(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private JSObject mergedObject(JSONObject base, JSONObject patch) {
+        JSObject result = new JSObject();
+        copyObjectProperties(base, result);
+        copyObjectProperties(patch, result);
+        return result;
+    }
+
+    private void copyObjectProperties(JSONObject source, JSObject destination) {
+        if (source == null) {
+            return;
+        }
+        Iterator<String> keys = source.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            Object value = source.opt(key);
+            if (value != null) {
+                destination.put(key, value);
+            }
+        }
+    }
+
+    private JSObject objectOrEmpty(JSONObject source, String key) {
+        return mergedObject(source == null ? null : source.optJSONObject(key), null);
+    }
+
+    private JSONArray arrayOrEmpty(JSONObject source, String key) {
+        JSONArray value = source == null ? null : source.optJSONArray(key);
+        return value == null ? new JSArray() : value;
+    }
+
+    private String nullableString(JSONObject source, String key) {
+        if (source == null || !source.has(key) || source.isNull(key)) {
+            return null;
+        }
+        return source.optString(key, null);
     }
 
     @PluginMethod
@@ -403,55 +579,64 @@ public class NativeNavigationPlugin extends Plugin {
                 call.reject("WebView unavailable");
                 return;
             }
-
-            activeTransitionId = call.getString("id", "transition-" + System.currentTimeMillis());
-            activeTransitionDirection = call.getString("direction", "forward");
             Double duration = call.getDouble("duration");
-            activeTransitionMs = duration == null ? defaultTransitionMs : Math.max(0, duration.intValue());
-            RectF zoomSourceRect = "zoom".equals(activeTransitionDirection) ? transitionRect(call.getObject("sourceRect", null)) : null;
-            activeZoomSourceFrame = zoomSourceRect == null ? null : rootFrame(zoomSourceRect, webView);
-            Double cornerRadius = call.getDouble("cornerRadius");
-            activeZoomCornerRadius = cornerRadius == null ? 0f : cornerRadius.floatValue();
+            if (duration != null && !isValidTransitionDuration(duration)) {
+                call.reject("duration must be finite and between 0 and " + MAX_TRANSITION_MS + " milliseconds");
+                return;
+            }
 
-            removeTransitionSnapshot(root, null);
-            restoreTransitionRootBackground();
+            cancelActiveTransitionForReplacement();
+            resetWebViewTransitionProperties(webView);
 
+            String transitionId = call.getString("id", nextTransitionId());
+            String direction = call.getString("direction", "forward");
+            int durationMs = duration == null ? defaultTransitionMs : validatedTransitionDuration(duration);
+            TransitionSession session = new TransitionSession(transitionId, direction, durationMs);
+            activeTransition = session;
+
+            RectF zoomSourceRectDp = "zoom".equals(direction) ? transitionRect(call.getObject("sourceRect", null)) : null;
+            session.zoomSourceFrame = zoomSourceRectDp == null ? null : rootFrameFromDp(zoomSourceRectDp, webView, root);
+            session.zoomCornerRadiusPx = cornerRadiusPx(call.getDouble("cornerRadius"));
             int transitionSurface = transitionSurfaceColor(webView);
-            prepareTransitionRootBackground(root, transitionSurface);
-            Bitmap bitmap = Bitmap.createBitmap(webView.getWidth(), webView.getHeight(), Bitmap.Config.ARGB_8888);
-            webView.draw(new Canvas(bitmap));
-            if (zoomSourceRect != null) {
-                Rect crop = bitmapCropRect(zoomSourceRect, bitmap);
-                Bitmap cropped = Bitmap.createBitmap(bitmap, crop.left, crop.top, crop.width(), crop.height());
-                if (cropped != bitmap) {
-                    // A full-screen ARGB_8888 capture is multiple megabytes of native
-                    // memory; releasing the uncropped source immediately keeps repeated
-                    // zoom transitions from piling them up until the next GC.
-                    bitmap.recycle();
-                }
-                bitmap = cropped;
-            }
-            transitionSnapshot = new ImageView(getContext());
-            transitionSnapshotBitmap = bitmap;
-            transitionSnapshot.setImageBitmap(bitmap);
-            transitionSnapshot.setBackgroundColor(transitionSurface);
-            transitionSnapshot.setScaleType(ImageView.ScaleType.FIT_XY);
-            FrameLayout.LayoutParams params = activeZoomSourceFrame == null
-                ? new FrameLayout.LayoutParams(webView.getWidth(), webView.getHeight())
-                : new FrameLayout.LayoutParams(Math.round(activeZoomSourceFrame.width()), Math.round(activeZoomSourceFrame.height()));
-            params.leftMargin = activeZoomSourceFrame == null ? webView.getLeft() : Math.round(activeZoomSourceFrame.left);
-            params.topMargin = activeZoomSourceFrame == null ? webView.getTop() : Math.round(activeZoomSourceFrame.top);
-            if (activeZoomCornerRadius > 0) {
-                transitionSnapshot.setClipToOutline(true);
-                transitionSnapshot.setOutlineProvider(roundRectOutlineProvider(activeZoomCornerRadius));
-            }
-            root.addView(transitionSnapshot, params);
-            webView.setAlpha(0.01f);
-            bringChromeToFront();
-            armTransitionWatchdog(activeTransitionId, activeTransitionMs);
+            prepareTransitionRootBackground(session, root, transitionSurface);
 
-            JSObject event = transitionEvent(activeTransitionId, activeTransitionDirection, activeTransitionMs);
-            notifyListeners("transitionStart", event);
+            try {
+                Rect crop = zoomSourceRectDp == null ? null : bitmapCropRectFromDp(zoomSourceRectDp, webView);
+                session.bitmap = captureWebViewBitmap(webView, crop);
+                session.snapshot = new ImageView(getContext());
+                session.snapshot.setImageBitmap(session.bitmap);
+                session.snapshot.setBackgroundColor(transitionSurface);
+                session.snapshot.setScaleType(ImageView.ScaleType.FIT_XY);
+            } catch (OutOfMemoryError | RuntimeException error) {
+                cleanupTransition(session, false, null);
+                call.reject("Unable to capture the WebView transition snapshot");
+                return;
+            }
+
+            try {
+                RectF snapshotFrame = session.zoomSourceFrame == null ? webViewFrameInRoot(webView, root) : session.zoomSourceFrame;
+                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                    Math.max(1, Math.round(snapshotFrame.width())),
+                    Math.max(1, Math.round(snapshotFrame.height()))
+                );
+                params.leftMargin = Math.round(snapshotFrame.left);
+                params.topMargin = Math.round(snapshotFrame.top);
+                if (session.zoomCornerRadiusPx > 0) {
+                    session.snapshot.setClipToOutline(true);
+                    session.snapshot.setOutlineProvider(roundRectOutlineProvider(session.zoomCornerRadiusPx));
+                }
+                root.addView(session.snapshot, params);
+                webView.setAlpha(0.01f);
+            } catch (OutOfMemoryError | RuntimeException error) {
+                cleanupTransition(session, false, null);
+                call.reject("Unable to prepare the WebView transition snapshot");
+                return;
+            }
+            bringChromeToFront();
+            armTransitionWatchdog(session, durationMs);
+
+            JSObject event = transitionEvent(session.id, session.direction, session.durationMs);
+            emitEvent("transitionStart", event);
             call.resolve(event);
         });
     }
@@ -465,28 +650,43 @@ public class NativeNavigationPlugin extends Plugin {
                 call.reject("WebView unavailable");
                 return;
             }
-
-            String transitionId = call.getString(
-                "id",
-                activeTransitionId == null ? "transition-" + System.currentTimeMillis() : activeTransitionId
-            );
-            String direction = call.getString("direction", activeTransitionDirection);
+            String explicitId = call.getString("id", null);
+            TransitionSession session = activeTransition;
+            if (session == null || session.completed) {
+                call.reject("No active transition");
+                return;
+            }
+            if (explicitId != null && !explicitId.equals(session.id)) {
+                call.reject("Transition id does not match the active transition");
+                return;
+            }
+            if (session.finishCall != null) {
+                call.reject("Transition is already finishing");
+                return;
+            }
             Double duration = call.getDouble("duration");
-            int durationMs = duration == null ? activeTransitionMs : Math.max(0, duration.intValue());
+            if (duration != null && !isValidTransitionDuration(duration)) {
+                call.reject("duration must be finite and between 0 and " + MAX_TRANSITION_MS + " milliseconds");
+                return;
+            }
+            String direction = call.getString("direction", session.direction);
+            int durationMs = duration == null ? session.durationMs : validatedTransitionDuration(duration);
+            session.direction = direction;
+            session.durationMs = durationMs;
+            session.finishCall = call;
+            armTransitionWatchdog(session, durationMs);
+
             float width = webView.getWidth();
             if ("zoom".equals(direction)) {
-                RectF sourceRect = transitionRect(call.getObject("sourceRect", null));
-                RectF targetRect = transitionRect(call.getObject("targetRect", null));
-                Double cornerRadius = call.getDouble("cornerRadius");
+                FrameLayout root = contentRoot();
+                RectF sourceRectDp = transitionRect(call.getObject("sourceRect", null));
+                RectF targetRectDp = transitionRect(call.getObject("targetRect", null));
                 finishZoomTransition(
                     webView,
-                    transitionSnapshot,
-                    transitionId,
-                    durationMs,
-                    sourceRect == null ? null : rootFrame(sourceRect, webView),
-                    targetRect == null ? null : rootFrame(targetRect, webView),
-                    cornerRadius == null ? activeZoomCornerRadius : cornerRadius.floatValue(),
-                    call
+                    session,
+                    root == null || sourceRectDp == null ? null : rootFrameFromDp(sourceRectDp, webView, root),
+                    root == null || targetRectDp == null ? null : rootFrameFromDp(targetRectDp, webView, root),
+                    call.getDouble("cornerRadius") == null ? session.zoomCornerRadiusPx : cornerRadiusPx(call.getDouble("cornerRadius"))
                 );
                 return;
             }
@@ -504,21 +704,13 @@ public class NativeNavigationPlugin extends Plugin {
             }
 
             boolean stationaryTransition = isStationaryTransition(direction);
+            webView.animate().cancel();
             webView.setTranslationX(startTranslation);
             webView.setAlpha(stationaryTransition ? 1f : 0.01f);
-            View snapshot = transitionSnapshot;
-            JSObject event = transitionEvent(transitionId, direction, durationMs);
-            Runnable finish = () -> {
-                cancelTransitionWatchdog();
-                removeTransitionSnapshot(contentRoot(), snapshot);
-                restoreTransitionRootBackground();
-                activeTransitionId = null;
-                activeZoomSourceFrame = null;
-                webView.setTranslationX(0);
-                webView.setAlpha(1f);
-                notifyListeners("transitionEnd", event);
-                call.resolve(event);
-            };
+            ImageView snapshot = session.snapshot;
+            TransitionSession finishingSession = session;
+            JSObject event = transitionEvent(session.id, direction, durationMs);
+            Runnable finish = () -> completeTransition(finishingSession, event);
 
             if (durationMs == 0) {
                 finish.run();
@@ -527,6 +719,7 @@ public class NativeNavigationPlugin extends Plugin {
 
             webView.animate().translationX(0).alpha(1f).setDuration(durationMs).start();
             if (snapshot != null) {
+                snapshot.animate().cancel();
                 snapshot
                     .animate()
                     .translationX(snapshotEndTranslation)
@@ -535,7 +728,8 @@ public class NativeNavigationPlugin extends Plugin {
                     .withEndAction(finish)
                     .start();
             } else {
-                webView.postDelayed(finish, durationMs);
+                finishingSession.delayedCompletion = finish;
+                transitionWatchdogHandler.postDelayed(finish, durationMs);
             }
         });
     }
@@ -547,85 +741,52 @@ public class NativeNavigationPlugin extends Plugin {
         call.resolve(ret);
     }
 
-    /**
-     * Schedules {@link #recoverStuckTransition} to force-complete {@code id} if
-     * {@link #cancelTransitionWatchdog} has not already run by then. The delay
-     * is generous (the requested duration plus a multi-second grace period) so
-     * it never fires during a legitimate, merely slow, transition.
-     */
-    private void armTransitionWatchdog(String id, int durationMs) {
-        cancelTransitionWatchdog();
-        long delayMs = Math.max(durationMs, defaultTransitionMs) + 4_000L;
-        transitionWatchdogRunnable = () -> recoverStuckTransition(id);
-        transitionWatchdogHandler.postDelayed(transitionWatchdogRunnable, delayMs);
+    private void armTransitionWatchdog(TransitionSession session, int durationMs) {
+        cancelTransitionCallbacks(session);
+        long delayMs = Math.max(0, durationMs) + (long) TRANSITION_WATCHDOG_GRACE_MS;
+        session.watchdog = () -> recoverStuckTransition(session);
+        transitionWatchdogHandler.postDelayed(session.watchdog, delayMs);
     }
 
-    private void cancelTransitionWatchdog() {
-        if (transitionWatchdogRunnable != null) {
-            transitionWatchdogHandler.removeCallbacks(transitionWatchdogRunnable);
-            transitionWatchdogRunnable = null;
-        }
-    }
-
-    /**
-     * Force-completes transition {@code id} if it is still the active one,
-     * restoring the WebView to a normal, visible state without requiring a
-     * matching {@code finishTransition} call. A no-op if {@code id} was already
-     * finished normally or superseded by a newer {@code beginTransition}.
-     */
-    private void recoverStuckTransition(String id) {
-        cancelTransitionWatchdog();
-        if (!id.equals(activeTransitionId)) {
+    private void cancelTransitionCallbacks(TransitionSession session) {
+        if (session == null) {
             return;
         }
-        Bridge bridge = getBridge();
-        View webView = bridge == null ? null : bridge.getWebView();
-        String direction = activeTransitionDirection;
-        removeTransitionSnapshot(contentRoot(), null);
-        restoreTransitionRootBackground();
-        activeTransitionId = null;
-        activeZoomSourceFrame = null;
-        if (webView != null) {
-            webView.setTranslationX(0);
-            webView.setTranslationY(0);
-            webView.setScaleX(1f);
-            webView.setScaleY(1f);
-            webView.setAlpha(1f);
-            webView.setClipToOutline(false);
-            webView.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+        if (session.watchdog != null) {
+            transitionWatchdogHandler.removeCallbacks(session.watchdog);
+            session.watchdog = null;
         }
-        notifyListeners("transitionEnd", transitionEvent(id, direction, 0));
+        if (session.delayedCompletion != null) {
+            transitionWatchdogHandler.removeCallbacks(session.delayedCompletion);
+            session.delayedCompletion = null;
+        }
+    }
+
+    private void recoverStuckTransition(TransitionSession session) {
+        if (session == null || session != activeTransition || session.completed) {
+            return;
+        }
+        completeTransition(session, transitionEvent(session.id, session.direction, 0));
     }
 
     private void finishZoomTransition(
         View webView,
-        View snapshot,
-        String transitionId,
-        int durationMs,
+        TransitionSession session,
         RectF sourceFrame,
         RectF targetFrame,
-        float cornerRadius,
-        PluginCall call
+        float cornerRadiusPx
     ) {
-        RectF startFrame = sourceFrame == null ? activeZoomSourceFrame : sourceFrame;
+        RectF startFrame = sourceFrame == null ? session.zoomSourceFrame : sourceFrame;
+        FrameLayout root = contentRoot();
         if (startFrame == null) {
-            startFrame = new RectF(webView.getLeft(), webView.getTop(), webView.getRight(), webView.getBottom());
+            startFrame = root == null
+                ? new RectF(0, 0, webView.getWidth(), webView.getHeight())
+                : webViewFrameInRoot(webView, root);
         }
-        JSObject event = transitionEvent(transitionId, "zoom", durationMs);
-        Runnable finish = () -> {
-            cancelTransitionWatchdog();
-            removeTransitionSnapshot(contentRoot(), snapshot);
-            restoreTransitionRootBackground();
-            activeTransitionId = null;
-            activeZoomSourceFrame = null;
-            webView.setTranslationX(0);
-            webView.setTranslationY(0);
-            webView.setScaleX(1f);
-            webView.setScaleY(1f);
-            webView.setAlpha(1f);
-            notifyListeners("transitionEnd", event);
-            call.resolve(event);
-        };
+        int durationMs = session.durationMs;
+        ImageView snapshot = session.snapshot;
+        JSObject event = transitionEvent(session.id, "zoom", durationMs);
+        Runnable finish = () -> completeTransition(session, event);
 
         if (durationMs == 0) {
             finish.run();
@@ -633,6 +794,8 @@ public class NativeNavigationPlugin extends Plugin {
         }
 
         if (targetFrame != null && snapshot != null) {
+            webView.animate().cancel();
+            snapshot.animate().cancel();
             webView.setAlpha(0.01f);
             snapshot.setX(startFrame.left);
             snapshot.setY(startFrame.top);
@@ -656,8 +819,12 @@ public class NativeNavigationPlugin extends Plugin {
 
         float fullWidth = Math.max(webView.getWidth(), 1f);
         float fullHeight = Math.max(webView.getHeight(), 1f);
-        float fullCenterX = webView.getLeft() + fullWidth / 2f;
-        float fullCenterY = webView.getTop() + fullHeight / 2f;
+        RectF webViewFrame = root == null
+            ? new RectF(0, 0, fullWidth, fullHeight)
+            : webViewFrameInRoot(webView, root);
+        float fullCenterX = webViewFrame.centerX();
+        float fullCenterY = webViewFrame.centerY();
+        webView.animate().cancel();
         webView.setPivotX(fullWidth / 2f);
         webView.setPivotY(fullHeight / 2f);
         webView.setTranslationX(startFrame.centerX() - fullCenterX);
@@ -665,20 +832,21 @@ public class NativeNavigationPlugin extends Plugin {
         webView.setScaleX(Math.max(startFrame.width() / fullWidth, 0.01f));
         webView.setScaleY(Math.max(startFrame.height() / fullHeight, 0.01f));
         webView.setAlpha(1f);
-        if (cornerRadius > 0) {
+        if (cornerRadiusPx > 0) {
             webView.setClipToOutline(true);
-            webView.setOutlineProvider(roundRectOutlineProvider(cornerRadius));
+            webView.setOutlineProvider(roundRectOutlineProvider(cornerRadiusPx));
         }
 
         if (snapshot != null) {
+            snapshot.animate().cancel();
             snapshot.setX(startFrame.left);
             snapshot.setY(startFrame.top);
             snapshot.setPivotX(0f);
             snapshot.setPivotY(0f);
             snapshot
                 .animate()
-                .x(webView.getLeft())
-                .y(webView.getTop())
+                .x(webViewFrame.left)
+                .y(webViewFrame.top)
                 .scaleX(fullWidth / Math.max(startFrame.width(), 1f))
                 .scaleY(fullHeight / Math.max(startFrame.height(), 1f))
                 .alpha(0f)
@@ -702,42 +870,109 @@ public class NativeNavigationPlugin extends Plugin {
             .start();
     }
 
-    /**
-     * Removes and releases the snapshot overlay. {@code expected} guards against a
-     * stale transition's completion callback tearing down the snapshot that a newer
-     * {@code beginTransition} has already installed.
-     */
-    private void removeTransitionSnapshot(FrameLayout root, View expected) {
-        ImageView snapshot = transitionSnapshot;
-        if (snapshot == null || (expected != null && expected != snapshot)) {
+    private void completeTransition(TransitionSession session, JSObject event) {
+        if (session == null || session != activeTransition || session.completed) {
             return;
         }
-        snapshot.animate().cancel();
-        if (root != null) {
-            root.removeView(snapshot);
-        }
-        snapshot.setImageDrawable(null);
-        transitionSnapshot = null;
-        if (transitionSnapshotBitmap != null) {
-            transitionSnapshotBitmap.recycle();
-            transitionSnapshotBitmap = null;
+        PluginCall finishCall = session.finishCall;
+        cleanupTransition(session, true, event);
+        if (finishCall != null) {
+            finishCall.resolve(event);
         }
     }
 
-    private void moveLastDetachedTrailingItemToEnd() {
-        // List.removeIf / Stream need API 24+, which is this library's floor.
-        NativeTabItem trailingItem = null;
-        for (int index = tabItems.size() - 1; index >= 0; index--) {
-            if (tabItems.get(index).detachedTrailing) {
-                trailingItem = tabItems.remove(index);
-                break;
+    private void cancelActiveTransitionForReplacement() {
+        TransitionSession session = activeTransition;
+        if (session != null && !session.completed) {
+            JSObject event = transitionEvent(session.id, session.direction, 0);
+            PluginCall finishCall = session.finishCall;
+            cleanupTransition(session, true, event);
+            if (finishCall != null) {
+                finishCall.resolve(event);
             }
         }
-        if (trailingItem == null) {
+    }
+
+    private void cleanupTransition(TransitionSession session, boolean notifyEnd, JSObject event) {
+        if (session == null || session.completed) {
             return;
         }
-        tabItems.removeIf((item) -> item.detachedTrailing);
-        tabItems.add(trailingItem);
+        session.completed = true;
+        cancelTransitionCallbacks(session);
+        Bridge bridge = getBridge();
+        View webView = bridge == null ? null : bridge.getWebView();
+        if (webView != null) {
+            resetWebViewTransitionProperties(webView);
+        }
+        removeTransitionSnapshot(session);
+        restoreTransitionRootBackground(session);
+        if (activeTransition == session) {
+            activeTransition = null;
+        }
+        if (notifyEnd && event != null) {
+            emitEvent("transitionEnd", event);
+        }
+    }
+
+    private void removeTransitionSnapshot(TransitionSession session) {
+        if (session == null) {
+            return;
+        }
+        ImageView snapshot = session.snapshot;
+        if (snapshot != null) {
+            snapshot.animate().cancel();
+            removeFromParent(snapshot);
+            snapshot.setImageDrawable(null);
+            session.snapshot = null;
+        }
+        if (session.bitmap != null && !session.bitmap.isRecycled()) {
+            session.bitmap.recycle();
+        }
+        session.bitmap = null;
+    }
+
+    private void resetWebViewTransitionProperties(View webView) {
+        webView.animate().cancel();
+        webView.setTranslationX(0);
+        webView.setTranslationY(0);
+        webView.setScaleX(1f);
+        webView.setScaleY(1f);
+        webView.setAlpha(1f);
+        webView.setClipToOutline(false);
+        webView.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+    }
+
+    private Bitmap captureWebViewBitmap(View webView, Rect crop) {
+        Rect capture = crop == null ? new Rect(0, 0, webView.getWidth(), webView.getHeight()) : crop;
+        int captureWidth = Math.max(1, capture.width());
+        int captureHeight = Math.max(1, capture.height());
+        long pixels = (long) captureWidth * captureHeight;
+        float scale = pixels > MAX_SNAPSHOT_PIXELS ? (float) Math.sqrt(MAX_SNAPSHOT_PIXELS / (double) pixels) : 1f;
+        int bitmapWidth = Math.max(1, Math.round(captureWidth * scale));
+        int bitmapHeight = Math.max(1, Math.round(captureHeight * scale));
+        Bitmap bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888);
+        try {
+            Canvas canvas = new Canvas(bitmap);
+            canvas.scale(scale, scale);
+            canvas.translate(-capture.left, -capture.top);
+            webView.draw(canvas);
+            return bitmap;
+        } catch (RuntimeException | OutOfMemoryError error) {
+            bitmap.recycle();
+            throw error;
+        }
+    }
+
+    private boolean isValidTransitionDuration(double duration) {
+        return Double.isFinite(duration) && duration >= 0 && duration <= MAX_TRANSITION_MS;
+    }
+
+    private int validatedTransitionDuration(double duration) {
+        return (int) Math.round(Math.max(0, Math.min(MAX_TRANSITION_MS, duration)));
+    }
+
+    private String nextTransitionId() {
+        return "transition-" + System.currentTimeMillis() + "-" + TRANSITION_SEQUENCE.incrementAndGet();
     }
 
     private boolean hasDetachedTrailingItem() {
@@ -763,38 +998,74 @@ public class NativeNavigationPlugin extends Plugin {
             menuActionIds.put(itemId, id);
             menuActionTitles.put(itemId, title);
             menuActionPlacements.put(itemId, placement);
+            menuActionTemplates.put(itemId, iconTemplate(rawItem.optJSONObject("icon")));
         }
     }
 
-    private RectF transitionRect(JSObject object) {
+    private RectF transitionRect(JSONObject object) {
         if (object == null) {
             return null;
         }
         double width = object.optDouble("width", 0);
         double height = object.optDouble("height", 0);
-        if (width <= 0 || height <= 0) {
+        double x = object.optDouble("x", 0);
+        double y = object.optDouble("y", 0);
+        double right = x + width;
+        double bottom = y + height;
+        if (
+            !Double.isFinite(x) ||
+            !Double.isFinite(y) ||
+            !Double.isFinite(width) ||
+            !Double.isFinite(height) ||
+            !Double.isFinite(right) ||
+            !Double.isFinite(bottom) ||
+            Math.abs(x) > MAX_TRANSITION_COORDINATE_DP ||
+            Math.abs(y) > MAX_TRANSITION_COORDINATE_DP ||
+            width <= 0 ||
+            width > MAX_TRANSITION_COORDINATE_DP ||
+            height <= 0 ||
+            height > MAX_TRANSITION_COORDINATE_DP
+        ) {
             return null;
         }
-        float x = (float) object.optDouble("x", 0);
-        float y = (float) object.optDouble("y", 0);
-        return new RectF(x, y, x + (float) width, y + (float) height);
+        return new RectF((float) x, (float) y, (float) right, (float) bottom);
     }
 
-    private RectF rootFrame(RectF viewportRect, View webView) {
+    private RectF rootFrameFromDp(RectF viewportRectDp, View webView, FrameLayout root) {
+        float density = displayDensity();
+        RectF webViewFrame = webViewFrameInRoot(webView, root);
         return new RectF(
-            webView.getLeft() + viewportRect.left,
-            webView.getTop() + viewportRect.top,
-            webView.getLeft() + viewportRect.right,
-            webView.getTop() + viewportRect.bottom
+            webViewFrame.left + NativeUnitConverter.dpToPhysicalPx(viewportRectDp.left, density),
+            webViewFrame.top + NativeUnitConverter.dpToPhysicalPx(viewportRectDp.top, density),
+            webViewFrame.left + NativeUnitConverter.dpToPhysicalPx(viewportRectDp.right, density),
+            webViewFrame.top + NativeUnitConverter.dpToPhysicalPx(viewportRectDp.bottom, density)
         );
     }
 
-    private Rect bitmapCropRect(RectF viewportRect, Bitmap bitmap) {
-        int left = Math.max(0, Math.min(bitmap.getWidth() - 1, Math.round(viewportRect.left)));
-        int top = Math.max(0, Math.min(bitmap.getHeight() - 1, Math.round(viewportRect.top)));
-        int right = Math.max(left + 1, Math.min(bitmap.getWidth(), Math.round(viewportRect.right)));
-        int bottom = Math.max(top + 1, Math.min(bitmap.getHeight(), Math.round(viewportRect.bottom)));
+    private RectF webViewFrameInRoot(View webView, FrameLayout root) {
+        int[] webViewLocation = new int[2];
+        int[] rootLocation = new int[2];
+        webView.getLocationOnScreen(webViewLocation);
+        root.getLocationOnScreen(rootLocation);
+        int left = NativeUnitConverter.relativeScreenPosition(webViewLocation[0], rootLocation[0]);
+        int top = NativeUnitConverter.relativeScreenPosition(webViewLocation[1], rootLocation[1]);
+        return new RectF(left, top, left + webView.getWidth(), top + webView.getHeight());
+    }
+
+    private Rect bitmapCropRectFromDp(RectF viewportRectDp, View webView) {
+        float density = displayDensity();
+        int left = Math.max(0, Math.min(webView.getWidth() - 1, Math.round(NativeUnitConverter.dpToPhysicalPx(viewportRectDp.left, density))));
+        int top = Math.max(0, Math.min(webView.getHeight() - 1, Math.round(NativeUnitConverter.dpToPhysicalPx(viewportRectDp.top, density))));
+        int right = Math.max(left + 1, Math.min(webView.getWidth(), Math.round(NativeUnitConverter.dpToPhysicalPx(viewportRectDp.right, density))));
+        int bottom = Math.max(top + 1, Math.min(webView.getHeight(), Math.round(NativeUnitConverter.dpToPhysicalPx(viewportRectDp.bottom, density))));
         return new Rect(left, top, right, bottom);
+    }
+
+    private float cornerRadiusPx(Double cornerRadiusDp) {
+        if (cornerRadiusDp == null || !Double.isFinite(cornerRadiusDp) || cornerRadiusDp <= 0d) {
+            return 0f;
+        }
+        return NativeUnitConverter.dpToPhysicalPx(Math.min(cornerRadiusDp, SvgIconRenderer.MAX_ICON_SIZE_DP), displayDensity());
     }
 
     private ViewOutlineProvider roundRectOutlineProvider(float radius) {
@@ -830,7 +1101,7 @@ public class NativeNavigationPlugin extends Plugin {
             event.put("id", menuActionIds.get(itemId));
             event.put("title", menuActionTitles.get(itemId));
             event.put("placement", menuActionPlacements.get(itemId));
-            notifyListeners("navbarItemTap", event);
+            emitEvent("navbarItemTap", event);
             return true;
         });
 
@@ -922,12 +1193,13 @@ public class NativeNavigationPlugin extends Plugin {
                     return;
                 }
                 selectedTabIndex = itemIndex;
+                tabbarState.put("selectedId", item.id);
                 renderTabbarItems(labelVisibilityMode, icons);
                 JSObject event = new JSObject();
                 event.put("id", item.id);
                 event.put("index", item.sourceIndex);
                 event.put("title", item.title);
-                notifyListeners("tabSelect", event);
+                emitEvent("tabSelect", event);
             });
             tabbar.addView(button, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
@@ -947,7 +1219,7 @@ public class NativeNavigationPlugin extends Plugin {
         FrameLayout button = new FrameLayout(getContext());
         button.setClipChildren(false);
         button.setClipToPadding(false);
-        button.setForeground(selectableItemBackground());
+        button.setForeground(tabRippleBackground());
         if (center) {
             GradientDrawable centerBackground = new GradientDrawable();
             centerBackground.setShape(GradientDrawable.OVAL);
@@ -958,10 +1230,10 @@ public class NativeNavigationPlugin extends Plugin {
             button.addView(centerFill, new FrameLayout.LayoutParams(centerFillDiameter, centerFillDiameter, Gravity.CENTER));
         }
 
-        if (!center && selected) {
+        if (!center && selected && !disableIndicator) {
             GradientDrawable selectedBackground = new GradientDrawable();
             selectedBackground.setShape(GradientDrawable.OVAL);
-            selectedBackground.setColor(withAlpha(tintColor, 34));
+            selectedBackground.setColor(indicatorColor);
             View selectedCircle = new View(getContext());
             selectedCircle.setBackground(selectedBackground);
             button.addView(selectedCircle, new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.CENTER));
@@ -974,16 +1246,27 @@ public class NativeNavigationPlugin extends Plugin {
         button.addView(content, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         Drawable currentIcon = selected && item.selectedIcon != null ? item.selectedIcon : item.icon;
+        boolean usesSelectedIcon = selected && item.selectedIcon != null;
+        boolean template = usesSelectedIcon ? item.selectedIconTemplate : item.iconTemplate;
+        int iconWidthDp = usesSelectedIcon ? item.selectedIconWidthDp : item.iconWidthDp;
+        int iconHeightDp = usesSelectedIcon ? item.selectedIconHeightDp : item.iconHeightDp;
         boolean labelVisible = center ? showLabel && (currentIcon == null || !icons) : showLabel;
         int itemColor = center ? tabbarStyle.centerButtonIconColor : (selected ? tintColor : inactiveTintColor);
         if (icons && currentIcon != null) {
             Drawable icon = currentIcon.mutate();
-            icon.setTint(itemColor);
+            if (template) {
+                icon.setTint(itemColor);
+            }
             ImageView image = new ImageView(getContext());
             image.setImageDrawable(icon);
-            image.setColorFilter(itemColor);
-            int imageSize = center ? dp(32) : dp(24);
-            LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(imageSize, imageSize);
+            if (template) {
+                image.setColorFilter(itemColor);
+            } else {
+                image.clearColorFilter();
+            }
+            int imageWidth = dp(Math.max(1, Math.min(SvgIconRenderer.MAX_ICON_SIZE_DP, iconWidthDp)));
+            int imageHeight = dp(Math.max(1, Math.min(SvgIconRenderer.MAX_ICON_SIZE_DP, iconHeightDp)));
+            LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(imageWidth, imageHeight);
             imageParams.bottomMargin = labelVisible ? dp(2) : 0;
             content.addView(image, imageParams);
         }
@@ -1017,7 +1300,7 @@ public class NativeNavigationPlugin extends Plugin {
             button.addView(badge, badgeParams);
         }
 
-        button.setContentDescription(item.title);
+        button.setContentDescription(item.title == null || item.title.isEmpty() ? item.id : item.title);
         return button;
     }
 
@@ -1027,7 +1310,7 @@ public class NativeNavigationPlugin extends Plugin {
         }
         String svg = svgFrom(descriptor);
         if (svg != null && !svg.isEmpty()) {
-            return SvgIconRenderer.render(getContext().getResources(), svg, iconSizeDp(descriptor));
+            return SvgIconRenderer.render(getContext().getResources(), svg, iconWidthDp(descriptor), iconHeightDp(descriptor));
         }
         JSONObject android = descriptor.optJSONObject("android");
         String resource = android == null ? null : android.optString("resource", null);
@@ -1039,7 +1322,7 @@ public class NativeNavigationPlugin extends Plugin {
         }
         String inlineSvg = inlineSvgFrom(resource);
         if (inlineSvg != null) {
-            return SvgIconRenderer.render(getContext().getResources(), inlineSvg, iconSizeDp(descriptor));
+            return SvgIconRenderer.render(getContext().getResources(), inlineSvg, iconWidthDp(descriptor), iconHeightDp(descriptor));
         }
         if (resource == null || resource.isEmpty()) {
             return null;
@@ -1075,10 +1358,13 @@ public class NativeNavigationPlugin extends Plugin {
             return null;
         }
         String trimmed = value.trim();
-        if (trimmed.startsWith("<svg")) {
-            return trimmed;
+        if (trimmed.length() > MAX_INLINE_IMAGE_CHARACTERS) {
+            return null;
         }
-        String lower = trimmed.toLowerCase();
+        if (trimmed.startsWith("<svg")) {
+            return SvgIconRenderer.isSafeSvg(trimmed) ? trimmed : null;
+        }
+        String lower = trimmed.toLowerCase(Locale.ROOT);
         if (!lower.startsWith("data:image/svg+xml")) {
             return null;
         }
@@ -1091,22 +1377,45 @@ public class NativeNavigationPlugin extends Plugin {
         try {
             if (meta.contains(";base64")) {
                 byte[] decoded = android.util.Base64.decode(payload, android.util.Base64.DEFAULT);
-                return new String(decoded, "UTF-8");
+                if (decoded.length > SvgIconRenderer.MAX_SVG_CHARACTERS) {
+                    return null;
+                }
+                String svg = new String(decoded, StandardCharsets.UTF_8);
+                return SvgIconRenderer.isSafeSvg(svg) ? svg : null;
             }
-            return URLDecoder.decode(payload, "UTF-8");
+            String svg = URLDecoder.decode(payload, StandardCharsets.UTF_8);
+            return SvgIconRenderer.isSafeSvg(svg) ? svg : null;
         } catch (Exception ignored) {
             return null;
         }
     }
 
-    private int iconSizeDp(JSONObject descriptor) {
-        double width = descriptor.optDouble("width", 24);
-        return (int) Math.max(1, Math.round(width));
+    private int iconWidthDp(JSONObject descriptor) {
+        return iconDimensionDp(descriptor, "width", 24);
+    }
+
+    private int iconHeightDp(JSONObject descriptor) {
+        return iconDimensionDp(descriptor, "height", iconWidthDp(descriptor));
+    }
+
+    private int iconDimensionDp(JSONObject descriptor, String key, int fallback) {
+        if (descriptor == null) {
+            return fallback;
+        }
+        double value = descriptor.optDouble(key, fallback);
+        if (!Double.isFinite(value) || value <= 0d) {
+            return fallback;
+        }
+        return (int) Math.max(1, Math.min(SvgIconRenderer.MAX_ICON_SIZE_DP, Math.round(value)));
+    }
+
+    private boolean iconTemplate(JSONObject descriptor) {
+        return descriptor == null || descriptor.optBoolean("template", true);
     }
 
     private void applyToolbarColors(Toolbar nativeToolbar, JSObject colors) {
         boolean dynamic = Boolean.TRUE.equals(colors.getBool("dynamic"));
-        int tintFallback = dynamic ? dynamicColor("system_accent1_600", tintColor) : tintColor;
+        int tintFallback = dynamic ? dynamicColor("system_accent1_600", DEFAULT_TINT_COLOR) : DEFAULT_TINT_COLOR;
         int backgroundFallback = dynamic
             ? withAlpha(dynamicColor(isNightMode() ? "system_neutral1_900" : "system_neutral1_50", Color.WHITE), 235)
             : Color.argb(225, 255, 255, 255);
@@ -1117,7 +1426,6 @@ public class NativeNavigationPlugin extends Plugin {
         int background = parseColor(colors.getString("background", null), backgroundFallback);
         navbarBackgroundColor = background;
         int foreground = parseColor(colors.getString("foreground", null), foregroundFallback);
-        tintColor = tint;
         nativeToolbar.setTitleTextColor(foreground);
         nativeToolbar.setSubtitleTextColor(withAlpha(foreground, 190));
         Drawable navigationIcon = nativeToolbar.getNavigationIcon();
@@ -1131,7 +1439,7 @@ public class NativeNavigationPlugin extends Plugin {
         for (int index = 0; index < nativeToolbar.getMenu().size(); index++) {
             MenuItem menuItem = nativeToolbar.getMenu().getItem(index);
             Drawable icon = menuItem.getIcon();
-            if (icon != null) {
+            if (icon != null && !Boolean.FALSE.equals(menuActionTemplates.get(menuItem.getItemId()))) {
                 // Drawable.mutate() returns a *copy* whenever the drawable shares a
                 // ConstantState (everything AppCompatResources hands out does), so
                 // upstream's `icon.mutate().setTint(tint)` tinted a throwaway and the
@@ -1174,7 +1482,11 @@ public class NativeNavigationPlugin extends Plugin {
         if (rawStyle == null || !rawStyle.has(key)) {
             return fallback;
         }
-        return (int) Math.round(rawStyle.optDouble(key, fallback));
+        double value = rawStyle.optDouble(key, fallback);
+        if (!Double.isFinite(value)) {
+            return fallback;
+        }
+        return (int) Math.round(Math.max(0d, Math.min(MAX_LAYOUT_DP, value)));
     }
 
     private int centerTabIndex() {
@@ -1191,10 +1503,12 @@ public class NativeNavigationPlugin extends Plugin {
         return tabItems.size() / 2;
     }
 
-    private void applyTabbarColors(PluginCall call, JSObject colors) {
+    private void applyTabbarColors(JSONObject options, JSObject colors) {
         boolean dynamic = Boolean.TRUE.equals(colors.getBool("dynamic"));
-        int tintFallback = dynamic ? dynamicColor("system_accent1_600", tintColor) : tintColor;
-        int inactiveFallback = dynamic ? dynamicColor("system_neutral2_600", inactiveTintColor) : inactiveTintColor;
+        int tintFallback = dynamic ? dynamicColor("system_accent1_600", DEFAULT_TINT_COLOR) : DEFAULT_TINT_COLOR;
+        int inactiveFallback = dynamic
+            ? dynamicColor("system_neutral2_600", DEFAULT_INACTIVE_TINT_COLOR)
+            : DEFAULT_INACTIVE_TINT_COLOR;
         int backgroundFallback = dynamic
             ? dynamicColor(isNightMode() ? "system_neutral1_900" : "system_neutral1_50", DEFAULT_TABBAR_BACKGROUND_COLOR)
             : DEFAULT_TABBAR_BACKGROUND_COLOR;
@@ -1355,12 +1669,12 @@ public class NativeNavigationPlugin extends Plugin {
         }
     }
 
-    private Integer colorOption(PluginCall call, JSObject colors, String directKey, String colorKey, Integer fallback) {
-        Integer direct = parseColorOrNull(call.getString(directKey, null));
+    private Integer colorOption(JSONObject options, JSONObject colors, String directKey, String colorKey, Integer fallback) {
+        Integer direct = parseColorOrNull(options == null ? null : options.optString(directKey, null));
         if (direct != null) {
             return direct;
         }
-        Integer nested = parseColorOrNull(colors.getString(colorKey, null));
+        Integer nested = parseColorOrNull(colors == null ? null : colors.optString(colorKey, null));
         return nested == null ? fallback : nested;
     }
 
@@ -1379,17 +1693,11 @@ public class NativeNavigationPlugin extends Plugin {
         return Color.argb(Math.max(0, Math.min(255, alpha)), Color.red(color), Color.green(color), Color.blue(color));
     }
 
-    private Drawable selectableItemBackground() {
-        TypedValue outValue = new TypedValue();
-        boolean resolved = getContext()
-            .getTheme()
-            .resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, outValue, true);
-        if (!resolved || outValue.resourceId == 0) {
-            // Themes without the borderless ripple would otherwise throw
-            // Resources.NotFoundException out of the tab button builder.
-            return null;
-        }
-        return AppCompatResources.getDrawable(getContext(), outValue.resourceId);
+    private Drawable tabRippleBackground() {
+        GradientDrawable mask = new GradientDrawable();
+        mask.setShape(GradientDrawable.OVAL);
+        mask.setColor(Color.WHITE);
+        return new RippleDrawable(ColorStateList.valueOf(rippleColor), null, mask);
     }
 
     private boolean isNightMode() {
@@ -1408,8 +1716,9 @@ public class NativeNavigationPlugin extends Plugin {
         if (root == null) {
             return;
         }
-        int status = statusBarInset();
-        int bottom = navigationBarInset();
+        Insets systemInsets = currentSystemInsets();
+        int status = systemInsets.top;
+        int bottom = systemInsets.bottom;
         int navbarHeight = navbarVisible ? status + dp(DEFAULT_NAVBAR_DP) : 0;
         int tabbarHeight = dp(tabbarStyle.totalHeight());
         int tabbarBottomMargin = tabbarVisible ? bottom + dp(tabbarStyle.bottomGap) : bottom;
@@ -1427,6 +1736,8 @@ public class NativeNavigationPlugin extends Plugin {
                 Gravity.TOP
             );
             toolbarParams.topMargin = status;
+            toolbarParams.leftMargin = systemInsets.left;
+            toolbarParams.rightMargin = systemInsets.right;
             toolbar.setLayoutParams(toolbarParams);
             fillContainer(navbarGlassBackdrop);
             fillContainer(navbarGlassSurface);
@@ -1445,7 +1756,10 @@ public class NativeNavigationPlugin extends Plugin {
         }
         if (tabbarContainer != null) {
             int rootWidth = root.getWidth() > 0 ? root.getWidth() : Resources.getSystem().getDisplayMetrics().widthPixels;
-            int availableWidth = Math.max(0, rootWidth - dp(tabbarStyle.horizontalMargin) * 2);
+            int horizontalMargin = dp(tabbarStyle.horizontalMargin);
+            int safeLeft = Math.max(0, systemInsets.left);
+            int safeRight = Math.max(0, systemInsets.right);
+            int availableWidth = Math.max(0, rootWidth - safeLeft - safeRight - horizontalMargin * 2);
             int maxWidth = tabbarStyle.maxWidth > 0 ? dp(tabbarStyle.maxWidth) : availableWidth;
             boolean hasDetachedTrailing = !tabbarStyle.isCurve() && hasDetachedTrailingItem();
             int trailingExtra = hasDetachedTrailing ? dp(tabbarStyle.height) + dp(DETACHED_TRAILING_GAP_DP) : 0;
@@ -1453,9 +1767,10 @@ public class NativeNavigationPlugin extends Plugin {
             FrameLayout.LayoutParams tabbarContainerParams = new FrameLayout.LayoutParams(
                 tabbarWidth,
                 tabbarHeight,
-                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL
+                Gravity.BOTTOM | Gravity.LEFT
             );
             tabbarContainerParams.bottomMargin = tabbarBottomMargin;
+            tabbarContainerParams.leftMargin = safeLeft + horizontalMargin + Math.max(0, (availableWidth - tabbarWidth) / 2);
             tabbarContainer.setLayoutParams(tabbarContainerParams);
             fillContainer(tabbarGlassBackdrop);
             fillContainer(tabbarGlassSurface);
@@ -1492,39 +1807,52 @@ public class NativeNavigationPlugin extends Plugin {
     private void updateInsetsAndNotify() {
         layoutChrome();
         JSObject insets = currentInsets();
+        syncCssInsets(insets);
         JSObject event = new JSObject();
         event.put("insets", insets);
-        notifyListeners("safeAreaChanged", event);
+        emitEvent("safeAreaChanged", event);
+    }
+
+    private void syncCssInsets(JSObject insets) {
         Bridge bridge = getBridge();
         View webView = bridge == null ? null : bridge.getWebView();
-        if ("none".equals(contentInsetMode) || !(webView instanceof android.webkit.WebView)) {
+        if (!(webView instanceof android.webkit.WebView)) {
+            return;
+        }
+        StringBuilder script = new StringBuilder("(() => {const root=document.documentElement;");
+        if ("none".equals(contentInsetMode)) {
+            for (String variable : CSS_INSET_VARIABLES) {
+                script.append("root.style.removeProperty(").append(JSONObject.quote(variable)).append(");");
+            }
+        } else {
+            String[] keys = { "top", "right", "bottom", "left", "navbarHeight", "tabbarHeight" };
+            for (int index = 0; index < CSS_INSET_VARIABLES.length; index++) {
+                script
+                    .append("root.style.setProperty(")
+                    .append(JSONObject.quote(CSS_INSET_VARIABLES[index]))
+                    .append(",")
+                    .append(JSONObject.quote(insets.optInt(keys[index], 0) + "px"))
+                    .append(");");
+            }
+        }
+        script.append("})();");
+        ((android.webkit.WebView) webView).evaluateJavascript(script.toString(), null);
+    }
+
+    private void emitEvent(String eventName, JSObject event) {
+        JSObject detail = event == null ? new JSObject() : event;
+        notifyListeners(eventName, detail);
+        Bridge bridge = getBridge();
+        View webView = bridge == null ? null : bridge.getWebView();
+        if (!(webView instanceof android.webkit.WebView)) {
             return;
         }
         String script =
-            "(() => {" +
-            "const root=document.documentElement;" +
-            "root.style.setProperty('--cap-native-navigation-top','" +
-            insets.getInteger("top", 0) +
-            "px');" +
-            "root.style.setProperty('--cap-native-navigation-right','" +
-            insets.getInteger("right", 0) +
-            "px');" +
-            "root.style.setProperty('--cap-native-navigation-bottom','" +
-            insets.getInteger("bottom", 0) +
-            "px');" +
-            "root.style.setProperty('--cap-native-navigation-left','" +
-            insets.getInteger("left", 0) +
-            "px');" +
-            "root.style.setProperty('--cap-native-navbar-height','" +
-            insets.getInteger("navbarHeight", 0) +
-            "px');" +
-            "root.style.setProperty('--cap-native-tabbar-height','" +
-            insets.getInteger("tabbarHeight", 0) +
-            "px');" +
-            "window.dispatchEvent(new CustomEvent('capNativeNavigation:safeAreaChanged',{detail:{insets:" +
-            insets.toString() +
-            "}}));" +
-            "})();";
+            "window.dispatchEvent(new CustomEvent(" +
+            JSONObject.quote("capNativeNavigation:" + eventName) +
+            ",{detail:" +
+            detail.toString() +
+            "}));";
         ((android.webkit.WebView) webView).evaluateJavascript(script, null);
     }
 
@@ -1538,50 +1866,44 @@ public class NativeNavigationPlugin extends Plugin {
          * that margining is active; when the WebView is not offset — the default —
          * these expressions reduce to the plain bar heights.
          */
-        int webViewTop = webViewTopOffsetInRoot();
-        int webViewBottomGap = webViewBottomGapInRoot();
-        int top = navbarVisible ? Math.max(0, statusBarInset() + dp(DEFAULT_NAVBAR_DP) - webViewTop) : 0;
-        int bottom = tabbarVisible
-            ? Math.max(0, navigationBarInset() + dp(tabbarStyle.totalHeight()) + dp(tabbarStyle.bottomGap) - webViewBottomGap)
+        Insets systemInsets = currentSystemInsets();
+        Rect webViewGaps = webViewGapsInRoot();
+        int topPx = navbarVisible ? Math.max(0, systemInsets.top + dp(DEFAULT_NAVBAR_DP) - webViewGaps.top) : 0;
+        int bottomPx = tabbarVisible
+            ? Math.max(0, systemInsets.bottom + dp(tabbarStyle.totalHeight()) + dp(tabbarStyle.bottomGap) - webViewGaps.bottom)
             : 0;
+        int leftPx = Math.max(0, systemInsets.left - webViewGaps.left);
+        int rightPx = Math.max(0, systemInsets.right - webViewGaps.right);
+        float density = displayDensity();
+        int top = NativeUnitConverter.physicalPxToCssPx(topPx, density);
+        int right = NativeUnitConverter.physicalPxToCssPx(rightPx, density);
+        int bottom = NativeUnitConverter.physicalPxToCssPx(bottomPx, density);
+        int left = NativeUnitConverter.physicalPxToCssPx(leftPx, density);
         JSObject insets = new JSObject();
         insets.put("top", top);
-        insets.put("right", 0);
+        insets.put("right", right);
         insets.put("bottom", bottom);
-        insets.put("left", 0);
+        insets.put("left", left);
         insets.put("navbarHeight", top);
         insets.put("tabbarHeight", bottom);
         return insets;
     }
 
-    /** Distance between the top of the content root and the top of the WebView. */
-    private int webViewTopOffsetInRoot() {
+    /** Insets the host already applies between the WebView and content root. */
+    private Rect webViewGapsInRoot() {
         FrameLayout root = contentRoot();
         Bridge bridge = getBridge();
         View webView = bridge == null ? null : bridge.getWebView();
-        if (root == null || webView == null || webView.getHeight() <= 0) {
-            return 0;
+        if (root == null || webView == null || webView.getWidth() <= 0 || webView.getHeight() <= 0) {
+            return new Rect();
         }
-        int offset = 0;
-        View current = webView;
-        while (current != null && current != root) {
-            offset += current.getTop();
-            ViewParent parent = current.getParent();
-            current = parent instanceof View ? (View) parent : null;
-        }
-        return current == root ? Math.max(0, offset) : 0;
-    }
-
-    /** Distance between the bottom of the WebView and the bottom of the content root. */
-    private int webViewBottomGapInRoot() {
-        FrameLayout root = contentRoot();
-        Bridge bridge = getBridge();
-        View webView = bridge == null ? null : bridge.getWebView();
-        if (root == null || webView == null || webView.getHeight() <= 0 || root.getHeight() <= 0) {
-            return 0;
-        }
-        int top = webViewTopOffsetInRoot();
-        return Math.max(0, root.getHeight() - (top + webView.getHeight()));
+        RectF webViewFrame = webViewFrameInRoot(webView, root);
+        return new Rect(
+            Math.max(0, Math.round(webViewFrame.left)),
+            Math.max(0, Math.round(webViewFrame.top)),
+            Math.max(0, root.getWidth() - Math.round(webViewFrame.right)),
+            Math.max(0, root.getHeight() - Math.round(webViewFrame.bottom))
+        );
     }
 
     private JSObject insetsResult() {
@@ -1602,24 +1924,24 @@ public class NativeNavigationPlugin extends Plugin {
         return "tab".equals(direction) || "root".equals(direction) || "none".equals(direction);
     }
 
-    private void prepareTransitionRootBackground(FrameLayout root, int surfaceColor) {
-        activeTransitionRootBackground = root.getBackground();
-        activeTransitionRootBackgroundCaptured = true;
-        if (needsTransitionSurface(activeTransitionRootBackground)) {
+    private void prepareTransitionRootBackground(TransitionSession session, FrameLayout root, int surfaceColor) {
+        session.rootBackground = root.getBackground();
+        session.rootBackgroundCaptured = true;
+        if (needsTransitionSurface(session.rootBackground)) {
             root.setBackgroundColor(surfaceColor);
         }
     }
 
-    private void restoreTransitionRootBackground() {
-        if (!activeTransitionRootBackgroundCaptured) {
+    private void restoreTransitionRootBackground(TransitionSession session) {
+        if (session == null || !session.rootBackgroundCaptured) {
             return;
         }
         FrameLayout root = contentRoot();
         if (root != null) {
-            root.setBackground(activeTransitionRootBackground);
+            root.setBackground(session.rootBackground);
         }
-        activeTransitionRootBackground = null;
-        activeTransitionRootBackgroundCaptured = false;
+        session.rootBackground = null;
+        session.rootBackgroundCaptured = false;
     }
 
     private boolean needsTransitionSurface(Drawable background) {
@@ -1657,31 +1979,68 @@ public class NativeNavigationPlugin extends Plugin {
         if (observedRoot != null) {
             observedRoot.removeOnLayoutChangeListener(rootLayoutListener);
         }
+        removeFromParent(insetsObserverView);
         observedRoot = root;
         lastRootWidth = root.getWidth();
         lastRootHeight = root.getHeight();
         root.addOnLayoutChangeListener(rootLayoutListener);
+        insetsObserverView = new View(getContext());
+        insetsObserverView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        insetsObserverView.setOnApplyWindowInsetsListener((view, windowInsets) -> {
+            Insets updated = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            boolean changed = !hasReceivedWindowInsets || !sameInsets(lastSystemInsets, updated);
+            hasReceivedWindowInsets = true;
+            lastSystemInsets = updated;
+            if (changed) {
+                scheduleInsetsUpdate(view);
+            }
+            return windowInsets;
+        });
+        root.addView(insetsObserverView, new FrameLayout.LayoutParams(0, 0));
+        insetsObserverView.requestApplyInsets();
     }
 
     private void handleRootSizeChanged() {
-        if (!navbarVisible && !tabbarVisible) {
+        updateInsetsAndNotify();
+    }
+
+    private void scheduleInsetsUpdate(View view) {
+        if (insetsUpdatePending) {
             return;
         }
-        updateInsetsAndNotify();
+        insetsUpdatePending = true;
+        view.post(() -> {
+            insetsUpdatePending = false;
+            if (view == insetsObserverView) {
+                updateInsetsAndNotify();
+            }
+        });
+    }
+
+    private boolean sameInsets(Insets first, Insets second) {
+        return first.left == second.left && first.top == second.top && first.right == second.right && first.bottom == second.bottom;
     }
 
     private void teardownChrome() {
         // Also short-circuits any relayout already posted from the root listener.
         navbarVisible = false;
         tabbarVisible = false;
-        cancelTransitionWatchdog();
+        TransitionSession session = activeTransition;
+        if (session != null) {
+            cleanupTransition(session, false, null);
+        }
         if (observedRoot != null) {
             observedRoot.removeOnLayoutChangeListener(rootLayoutListener);
             observedRoot = null;
         }
-        FrameLayout root = contentRoot();
-        removeTransitionSnapshot(root, null);
-        restoreTransitionRootBackground();
+        if (insetsObserverView != null) {
+            insetsObserverView.setOnApplyWindowInsetsListener(null);
+            removeFromParent(insetsObserverView);
+            insetsObserverView = null;
+        }
+        hasReceivedWindowInsets = false;
+        lastSystemInsets = Insets.NONE;
+        insetsUpdatePending = false;
         if (navbarGlassBackdrop != null) {
             navbarGlassBackdrop.clearEffect();
         }
@@ -1705,6 +2064,7 @@ public class NativeNavigationPlugin extends Plugin {
         menuActionIds.clear();
         menuActionTitles.clear();
         menuActionPlacements.clear();
+        menuActionTemplates.clear();
     }
 
     private void removeFromParent(View view) {
@@ -1723,31 +2083,18 @@ public class NativeNavigationPlugin extends Plugin {
             return;
         }
         Window window = activity.getWindow();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.setDecorFitsSystemWindows(false);
-        } else {
-            window
-                .getDecorView()
-                .setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                );
-        }
+        window.setDecorFitsSystemWindows(false);
     }
 
-    private int statusBarInset() {
+    private Insets currentSystemInsets() {
+        if (hasReceivedWindowInsets) {
+            return lastSystemInsets;
+        }
         WindowInsets insets = rootWindowInsets();
         if (insets != null) {
-            return insets.getStableInsetTop();
+            return insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
         }
-        return systemDimension("status_bar_height");
-    }
-
-    private int navigationBarInset() {
-        WindowInsets insets = rootWindowInsets();
-        if (insets != null) {
-            return insets.getStableInsetBottom();
-        }
-        return systemDimension("navigation_bar_height");
+        return Insets.of(0, systemDimension("status_bar_height"), 0, systemDimension("navigation_bar_height"));
     }
 
     private WindowInsets rootWindowInsets() {
@@ -1767,11 +2114,15 @@ public class NativeNavigationPlugin extends Plugin {
     }
 
     private int dp(int value) {
-        return Math.round(value * getContext().getResources().getDisplayMetrics().density);
+        return Math.round(NativeUnitConverter.dpToPhysicalPx(value, displayDensity()));
     }
 
     private float dp(double value) {
-        return (float) (value * getContext().getResources().getDisplayMetrics().density);
+        return NativeUnitConverter.dpToPhysicalPx(value, displayDensity());
+    }
+
+    private float displayDensity() {
+        return NativeUnitConverter.normalizedDensity(getContext().getResources().getDisplayMetrics().density);
     }
 
     private void runOnUiThread(Runnable runnable) {

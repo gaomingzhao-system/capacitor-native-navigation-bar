@@ -1,13 +1,16 @@
 ext {
     junitVersion = project.hasProperty('junitVersion') ? rootProject.ext.junitVersion : '4.13.2'
-    androidxAppCompatVersion = project.hasProperty('androidxAppCompatVersion') ? rootProject.ext.androidxAppCompatVersion : '1.7.0'
-    androidxCoreVersion = project.hasProperty('androidxCoreVersion') ? rootProject.ext.androidxCoreVersion : '1.13.1'
-    androidxJunitVersion = project.hasProperty('androidxJunitVersion') ? rootProject.ext.androidxJunitVersion : '1.2.1'
-    androidxEspressoCoreVersion = project.hasProperty('androidxEspressoCoreVersion') ? rootProject.ext.androidxEspressoCoreVersion : '3.6.1'
+    androidxAppCompatVersion = project.hasProperty('androidxAppCompatVersion') ? rootProject.ext.androidxAppCompatVersion : '1.8.0'
+    // 1.18.0 is the newest stable Core release whose published AAR metadata
+    // supports this module's compileSdk 36 / AGP 8.13 baseline. Core 1.19.0
+    // raises its consumer minimums to compileSdk 37 and AGP 9.1.
+    androidxCoreVersion = project.hasProperty('androidxCoreVersion') ? rootProject.ext.androidxCoreVersion : '1.18.0'
+    androidxJunitVersion = project.hasProperty('androidxJunitVersion') ? rootProject.ext.androidxJunitVersion : '1.3.0'
+    androidxEspressoCoreVersion = project.hasProperty('androidxEspressoCoreVersion') ? rootProject.ext.androidxEspressoCoreVersion : '3.7.0'
     // Only used when this module is built on its own (`cd android && ./gradlew build`).
     // Inside an app the app's own buildscript classpath wins, which is what this
-    // library relies on when embedded in a Capacitor 7 app (AGP 8.7.x default).
-    standaloneAgpVersion = project.hasProperty('androidGradlePluginVersion') ? rootProject.ext.androidGradlePluginVersion : '8.7.2'
+    // library relies on when embedded in a Capacitor app.
+    standaloneAgpVersion = project.hasProperty('androidGradlePluginVersion') ? rootProject.ext.androidGradlePluginVersion : '8.13.2'
 }
 
 buildscript {
@@ -16,7 +19,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath "com.android.tools.build:gradle:${project.hasProperty('androidGradlePluginVersion') ? rootProject.ext.androidGradlePluginVersion : '8.7.2'}"
+        classpath "com.android.tools.build:gradle:${project.hasProperty('androidGradlePluginVersion') ? rootProject.ext.androidGradlePluginVersion : '8.13.2'}"
     }
 }
 
@@ -24,31 +27,12 @@ apply plugin: 'com.android.library'
 
 android {
     namespace = "app.nativenavigationbar.capacitor"
-    // Follows the host app's compileSdk; the fallback (35) is Capacitor 7's own
-    // default so a standalone build (`cd android && ./gradlew build`) matches it.
-    compileSdk = project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 35
+    // Follows the host app's compileSdk, with an API 36 standalone fallback.
+    compileSdk = project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 36
     defaultConfig {
-        // Deliberately NOT `project.hasProperty('minSdkVersion') ? rootProject.ext.minSdkVersion
-        // : 24` (the pattern every other version here follows). Verified empirically:
-        // that pattern lets the *app's* lower value silently win whenever the app
-        // declares one — which a Capacitor 7 app's `variables.gradle` always does
-        // (default 23) — and neither Gradle nor the manifest merger raises any
-        // error, because there is no longer an independent "the library requires
-        // 24" signal once this module's own defaultConfig adopts 23 too. A plugin
-        // AndroidManifest.xml `<uses-sdk minSdkVersion="24">` doesn't survive that
-        // either: AGP regenerates the module's own merged manifest from
-        // defaultConfig.minSdkVersion before merging it into the app, so it
-        // overwrites a hand-written tag with the same conditional value.
-        //
-        // Hard-coding 24 here is what actually makes the floor enforceable: it is
-        // this module's genuine, independent minSdk, so the manifest merger
-        // correctly fails an app still on the Capacitor 7 template default of 23
-        // with "uses-sdk:minSdkVersion 23 cannot be smaller than version 24
-        // declared in library [...]" — verified by building this exact app both
-        // ways. Everything newer than API 24 stays behind Build.VERSION.SDK_INT
-        // checks regardless.
-        minSdkVersion 24
-        targetSdkVersion project.hasProperty('targetSdkVersion') ? rootProject.ext.targetSdkVersion : 35
+        // Keep the library's minimum independent so host apps cannot lower it.
+        minSdkVersion 30
+        targetSdkVersion project.hasProperty('targetSdkVersion') ? rootProject.ext.targetSdkVersion : 36
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -61,14 +45,11 @@ android {
         }
     }
     lint {
-        abortOnError = false
+        abortOnError = true
     }
     compileOptions {
-        // Capacitor 7 and 8 both compile capacitor-android with Java 21 and both
-        // require a JDK 21 toolchain, so 17 here is simply a lower, compatible
-        // bytecode floor that also lets the module build on a JDK 17 toolchain.
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
     testOptions {
         unitTests {

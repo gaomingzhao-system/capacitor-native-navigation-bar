@@ -5,7 +5,9 @@
 package app.nativenavigationbar.capacitor;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.util.List;
 import org.junit.Test;
@@ -41,5 +43,20 @@ public class SvgIconRendererTest {
     @Test
     public void returnsAnEmptyListForNullInput() {
         assertEquals(0, SvgIconRenderer.numbers(null).size());
+    }
+
+    @Test
+    public void rejectsNonFiniteLengths() {
+        assertNull(SvgIconRenderer.length("1e999"));
+        assertEquals(0, SvgIconRenderer.numbers("1e999").size());
+    }
+
+    @Test
+    public void rejectsDoctypeEntityAndOversizedSvgInput() {
+        assertTrue(SvgIconRenderer.isSafeSvg("<svg><path d='M0 0'/></svg>"));
+        assertFalse(SvgIconRenderer.isSafeSvg("<!DOCTYPE svg><svg/>"));
+        assertFalse(SvgIconRenderer.isSafeSvg("<svg><!ENTITY x 'x'></svg>"));
+        assertFalse(SvgIconRenderer.isSafeSvg("<svg><path></svg>"));
+        assertFalse(SvgIconRenderer.isSafeSvg("x".repeat(SvgIconRenderer.MAX_SVG_CHARACTERS + 1)));
     }
 }

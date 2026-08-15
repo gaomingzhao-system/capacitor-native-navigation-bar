@@ -17,10 +17,10 @@
  *     same identifier.
  *  4. package.json still declares the `capacitor` manifest the CLI looks for,
  *     and `files` ships the native sources and manifests.
- *  5. The iOS platform floor, Android minSdk fallback, and capacitor-swift-pm
- *     range match this release's declared policy (Capacitor 7 only, iOS 15+,
- *     Android API 24+) so a stale edit to one file cannot silently drift from
- *     the others.
+ *  5. The iOS/Android floors, Android Java/build baseline, JavaScript target,
+ *     and capacitor-swift-pm range match this release's declared policy
+ *     (Capacitor 7 only, iOS 15+, Android 11+/Java 21) so a stale edit to one
+ *     file cannot silently drift from the others.
  */
 
 import { readFileSync } from "node:fs";
@@ -110,7 +110,7 @@ for (const required of [
   }
 }
 
-// 5. This release's declared floors: iOS 15.0, Android minSdk 24, Capacitor 7
+// 5. This release's declared floors: iOS 15.0, Android minSdk 30, Capacitor 7
 // only. These are this plugin's own policy, not Capacitor 7's own minimums
 // (14.0 / 23) — consuming apps on the Capacitor 7 template defaults must raise
 // their own floors accordingly (documented in README.md).
@@ -132,7 +132,99 @@ check(
 check(
   "android minSdk (hard floor, not inherited from the host app)",
   match(read("android/build.gradle"), /^\s*minSdkVersion (\d+)$/m, "android minSdk"),
-  "24",
+  "30",
+);
+const androidBuild = read("android/build.gradle");
+check(
+  "android compileSdk standalone fallback",
+  match(androidBuild, /^\s*compileSdk\s*=.*:\s*(\d+)$/m, "android compileSdk"),
+  "36",
+);
+if (
+  !androidBuild.includes(
+    "project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion",
+  )
+) {
+  failures.push("android compileSdk must inherit the host value when supplied");
+}
+check(
+  "android targetSdk standalone fallback",
+  match(androidBuild, /^\s*targetSdkVersion\s+.*:\s*(\d+)$/m, "android targetSdk"),
+  "36",
+);
+if (
+  !androidBuild.includes(
+    "project.hasProperty('targetSdkVersion') ? rootProject.ext.targetSdkVersion",
+  )
+) {
+  failures.push("android targetSdk must inherit the host value when supplied");
+}
+check(
+  "android Java source compatibility",
+  match(
+    androidBuild,
+    /^\s*sourceCompatibility JavaVersion\.VERSION_(\d+)$/m,
+    "android Java source",
+  ),
+  "21",
+);
+check(
+  "android Java target compatibility",
+  match(
+    androidBuild,
+    /^\s*targetCompatibility JavaVersion\.VERSION_(\d+)$/m,
+    "android Java target",
+  ),
+  "21",
+);
+check(
+  "standalone Android Gradle Plugin",
+  match(androidBuild, /standaloneAgpVersion\s*=.*:\s*'([^']+)'/, "standalone AGP"),
+  "8.13.2",
+);
+check(
+  "Android Gradle Plugin classpath fallback",
+  match(
+    androidBuild,
+    /classpath\s+"com\.android\.tools\.build:gradle:\$\{[^}]*:\s*'([^']+)'\}"/,
+    "AGP classpath fallback",
+  ),
+  "8.13.2",
+);
+for (const [label, property, expected] of [
+  ["AndroidX AppCompat", "androidxAppCompatVersion", "1.8.0"],
+  ["AndroidX Core", "androidxCoreVersion", "1.18.0"],
+  ["AndroidX Test JUnit", "androidxJunitVersion", "1.3.0"],
+  ["AndroidX Espresso", "androidxEspressoCoreVersion", "3.7.0"],
+]) {
+  check(
+    `${label} fallback`,
+    match(
+      androidBuild,
+      new RegExp(`^\\s*${property}\\s*=.*:\\s*'([^']+)'$`, "m"),
+      `${label} fallback`,
+    ),
+    expected,
+  );
+}
+check(
+  "Gradle wrapper",
+  match(
+    read("android/gradle/wrapper/gradle-wrapper.properties"),
+    /^distributionUrl=.*gradle-([\d.]+)-(?:all|bin)\.zip$/m,
+    "Gradle wrapper",
+  ),
+  "8.14.3",
+);
+const tsconfig = JSON.parse(read("tsconfig.json").replace(/\/\*[\s\S]*?\*\//g, ""));
+check("TypeScript runtime target", tsconfig.compilerOptions?.target, "ES2020");
+if (!tsconfig.compilerOptions?.lib?.includes("ES2020")) {
+  failures.push('TypeScript runtime libs must include "ES2020"');
+}
+check(
+  "tsdown runtime target",
+  match(read("tsdown.config.mjs"), /^\s*target:\s*"([^"]+)"/m, "tsdown target"),
+  "es2020",
 );
 const swiftPmLowerBound = match(
   packageSwift,

@@ -33,7 +33,7 @@ export default defineConfig({
   format: ["esm"],
   dts: true,
   sourcemap: true,
-  target: "es2017",
+  target: "es2020",
   platform: "neutral",
   deps: { neverBundle: ["@capacitor/core"] },
   clean: true,

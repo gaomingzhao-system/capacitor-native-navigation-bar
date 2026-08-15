@@ -22,8 +22,14 @@ import java.io.StringReader;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.xml.parsers.SAXParserFactory;
+import org.xml.sax.Attributes;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserFactory;
 
@@ -34,25 +40,56 @@ import org.xmlpull.v1.XmlPullParserFactory;
 final class SvgIconRenderer {
 
     static final Pattern NUMBER_PATTERN = Pattern.compile("[-+]?(?:\\d*\\.\\d+|\\d+\\.?)(?:[eE][-+]?\\d+)?");
+    static final int MAX_SVG_CHARACTERS = 256_000;
+    static final int MAX_ICON_SIZE_DP = 256;
+    private static final int MAX_XML_ELEMENTS = 2_048;
+    private static final int MAX_XML_DEPTH = 64;
+    private static final int MAX_BITMAP_PIXELS = 4_194_304;
 
     private SvgIconRenderer() {}
 
-    static Drawable render(Resources resources, String svg, int iconSizeDp) {
-        int sizePx = Math.max(1, Math.round(iconSizeDp * resources.getDisplayMetrics().density));
-        Bitmap bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+    static Drawable render(Resources resources, String svg, int iconWidthDp, int iconHeightDp) {
+        if (!isSafeSvg(svg)) {
+            return null;
+        }
+        int safeWidthDp = Math.max(1, Math.min(MAX_ICON_SIZE_DP, iconWidthDp));
+        int safeHeightDp = Math.max(1, Math.min(MAX_ICON_SIZE_DP, iconHeightDp));
+        float density = NativeUnitConverter.normalizedDensity(resources.getDisplayMetrics().density);
+        int widthPx = Math.max(1, Math.round(safeWidthDp * density));
+        int heightPx = Math.max(1, Math.round(safeHeightDp * density));
+        long pixels = (long) widthPx * heightPx;
+        if (pixels > MAX_BITMAP_PIXELS) {
+            float scale = (float) Math.sqrt(MAX_BITMAP_PIXELS / (double) pixels);
+            widthPx = Math.max(1, Math.round(widthPx * scale));
+            heightPx = Math.max(1, Math.round(heightPx * scale));
+        }
+
+        Bitmap bitmap;
+        try {
+            bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888);
+        } catch (OutOfMemoryError | IllegalArgumentException ignored) {
+            return null;
+        }
         Canvas canvas = new Canvas(bitmap);
-        RectF viewBox = viewBox(svg, iconSizeDp);
-        canvas.scale(sizePx / Math.max(viewBox.width(), 1f), sizePx / Math.max(viewBox.height(), 1f));
+        RectF viewBox = viewBox(svg, safeWidthDp, safeHeightDp);
+        canvas.scale(widthPx / Math.max(viewBox.width(), 1f), heightPx / Math.max(viewBox.height(), 1f));
         canvas.translate(-viewBox.left, -viewBox.top);
 
         try {
             XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
+            parser.setFeature("http://xmlpull.org/v1/doc/features.html#process-docdecl", false);
             parser.setInput(new StringReader(svg));
             ArrayDeque<SvgStyle> styles = new ArrayDeque<>();
             styles.push(new SvgStyle());
+            int elementCount = 0;
             int event = parser.getEventType();
             while (event != XmlPullParser.END_DOCUMENT) {
                 if (event == XmlPullParser.START_TAG) {
+                    elementCount++;
+                    if (elementCount > MAX_XML_ELEMENTS || styles.size() >= MAX_XML_DEPTH) {
+                        bitmap.recycle();
+                        return null;
+                    }
                     SvgStyle style = styles.peek().copy();
                     style.apply(parser);
                     styles.push(style);
@@ -62,17 +99,70 @@ final class SvgIconRenderer {
                 }
                 event = parser.next();
             }
-        } catch (Exception ignored) {
-            // Malformed markup renders as far as it parsed, matching the iOS renderer.
+        } catch (Exception | OutOfMemoryError ignored) {
+            bitmap.recycle();
+            return null;
         }
 
         BitmapDrawable drawable = new BitmapDrawable(resources, bitmap);
-        drawable.setBounds(0, 0, sizePx, sizePx);
+        drawable.setBounds(0, 0, widthPx, heightPx);
         return drawable;
     }
 
+    static boolean isSafeSvg(String svg) {
+        if (svg == null || svg.isEmpty() || svg.length() > MAX_SVG_CHARACTERS) {
+            return false;
+        }
+        String lower = svg.toLowerCase(Locale.ROOT);
+        if (lower.contains("<!doctype") || lower.contains("<!entity")) {
+            return false;
+        }
+        try {
+            SAXParserFactory factory = SAXParserFactory.newInstance();
+            factory.setNamespaceAware(true);
+            SvgValidationHandler handler = new SvgValidationHandler();
+            org.xml.sax.XMLReader reader = factory.newSAXParser().getXMLReader();
+            reader.setEntityResolver((publicId, systemId) -> {
+                throw new SAXException("External SVG entities are not allowed");
+            });
+            reader.setContentHandler(handler);
+            reader.parse(new InputSource(new StringReader(svg)));
+            return handler.sawSvgRoot && handler.depth == 0;
+        } catch (Exception | OutOfMemoryError ignored) {
+            return false;
+        }
+    }
+
+    private static final class SvgValidationHandler extends DefaultHandler {
+
+        int depth;
+        int elementCount;
+        boolean sawSvgRoot;
+
+        @Override
+        public void startElement(String uri, String localName, String qualifiedName, Attributes attributes) throws SAXException {
+            depth++;
+            elementCount++;
+            String name = localName == null || localName.isEmpty() ? qualifiedName : localName;
+            if (depth == 1) {
+                sawSvgRoot = "svg".equalsIgnoreCase(name);
+            }
+            if (!sawSvgRoot || depth > MAX_XML_DEPTH || elementCount > MAX_XML_ELEMENTS) {
+                throw new SAXException("SVG structure exceeds renderer limits");
+            }
+        }
+
+        @Override
+        public void endElement(String uri, String localName, String qualifiedName) throws SAXException {
+            depth--;
+            if (depth < 0) {
+                throw new SAXException("Unbalanced SVG markup");
+            }
+        }
+    }
+
     private static void drawElement(Canvas canvas, XmlPullParser parser, SvgStyle style) {
-        String name = parser.getName().toLowerCase();
+        String name = parser.getName().toLowerCase(Locale.ROOT);
         if ("path".equals(name)) {
             Path path = path(attr(parser, "d"));
             if (path != null) {
@@ -114,13 +204,14 @@ final class SvgIconRenderer {
 
     private static void drawPath(Canvas canvas, Path path, SvgStyle style) {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        paint.setColor(Color.BLACK);
         paint.setAlpha(style.alpha);
         if (style.fill) {
+            paint.setColor(style.fillColor);
             paint.setStyle(Paint.Style.FILL);
             canvas.drawPath(path, paint);
         }
         if (style.stroke) {
+            paint.setColor(style.strokeColor);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(style.strokeWidth);
             paint.setStrokeCap(style.lineCap);
@@ -156,21 +247,22 @@ final class SvgIconRenderer {
         return path;
     }
 
-    static RectF viewBox(String svg, int iconSizeDp) {
+    static RectF viewBox(String svg, int fallbackWidthDp, int fallbackHeightDp) {
         List<Float> viewBoxValues = numbers(attribute(svg, "viewBox"));
-        if (viewBoxValues.size() >= 4) {
-            return new RectF(
-                viewBoxValues.get(0),
-                viewBoxValues.get(1),
-                viewBoxValues.get(0) + viewBoxValues.get(2),
-                viewBoxValues.get(1) + viewBoxValues.get(3)
-            );
+        if (viewBoxValues.size() >= 4 && viewBoxValues.get(2) > 0f && viewBoxValues.get(3) > 0f) {
+            float left = viewBoxValues.get(0);
+            float top = viewBoxValues.get(1);
+            float right = left + viewBoxValues.get(2);
+            float bottom = top + viewBoxValues.get(3);
+            if (Float.isFinite(right) && Float.isFinite(bottom)) {
+                return new RectF(left, top, right, bottom);
+            }
         }
         float width = value(attribute(svg, "width"));
         float height = value(attribute(svg, "height"));
         if (width <= 0 || height <= 0) {
-            width = iconSizeDp;
-            height = iconSizeDp;
+            width = fallbackWidthDp;
+            height = fallbackHeightDp;
         }
         return new RectF(0, 0, width, height);
     }
@@ -196,7 +288,14 @@ final class SvgIconRenderer {
         }
         Matcher matcher = NUMBER_PATTERN.matcher(value);
         while (matcher.find()) {
-            numbers.add(Float.parseFloat(matcher.group()));
+            try {
+                float parsed = Float.parseFloat(matcher.group());
+                if (Float.isFinite(parsed)) {
+                    numbers.add(parsed);
+                }
+            } catch (NumberFormatException ignored) {
+                // Ignore values outside Float's representable range.
+            }
         }
         return numbers;
     }
@@ -210,7 +309,15 @@ final class SvgIconRenderer {
             return null;
         }
         Matcher matcher = NUMBER_PATTERN.matcher(value.trim());
-        return matcher.find() ? Float.parseFloat(matcher.group()) : null;
+        if (!matcher.find()) {
+            return null;
+        }
+        try {
+            float parsed = Float.parseFloat(matcher.group());
+            return Float.isFinite(parsed) ? parsed : null;
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     /** Inherited presentation attributes for the shapes above. */
@@ -218,6 +325,8 @@ final class SvgIconRenderer {
 
         boolean fill = true;
         boolean stroke = false;
+        int fillColor = Color.BLACK;
+        int strokeColor = Color.BLACK;
         float strokeWidth = 2f;
         Paint.Cap lineCap = Paint.Cap.BUTT;
         Paint.Join lineJoin = Paint.Join.MITER;
@@ -227,6 +336,8 @@ final class SvgIconRenderer {
             SvgStyle copy = new SvgStyle();
             copy.fill = fill;
             copy.stroke = stroke;
+            copy.fillColor = fillColor;
+            copy.strokeColor = strokeColor;
             copy.strokeWidth = strokeWidth;
             copy.lineCap = lineCap;
             copy.lineJoin = lineJoin;
@@ -238,14 +349,16 @@ final class SvgIconRenderer {
             String fillValue = attr(parser, "fill");
             if (fillValue != null) {
                 fill = !"none".equalsIgnoreCase(fillValue);
+                fillColor = svgColor(fillValue, fillColor);
             }
             String strokeValue = attr(parser, "stroke");
             if (strokeValue != null) {
                 stroke = !"none".equalsIgnoreCase(strokeValue);
+                strokeColor = svgColor(strokeValue, strokeColor);
             }
             Float width = length(attr(parser, "stroke-width"));
             if (width != null) {
-                strokeWidth = width;
+                strokeWidth = Math.max(0f, Math.min(1024f, width));
             }
             Float opacity = length(attr(parser, "opacity"));
             if (opacity != null) {
@@ -266,6 +379,17 @@ final class SvgIconRenderer {
                 lineJoin = Paint.Join.BEVEL;
             } else if (join != null) {
                 lineJoin = Paint.Join.MITER;
+            }
+        }
+
+        private int svgColor(String value, int fallback) {
+            if (value == null || value.isEmpty() || "currentColor".equalsIgnoreCase(value) || "none".equalsIgnoreCase(value)) {
+                return fallback;
+            }
+            try {
+                return Color.parseColor(value);
+            } catch (IllegalArgumentException ignored) {
+                return fallback;
             }
         }
     }

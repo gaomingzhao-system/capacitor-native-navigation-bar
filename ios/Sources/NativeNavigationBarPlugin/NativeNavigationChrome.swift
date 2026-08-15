@@ -196,6 +196,11 @@ final class NativeNavigationFloatingTabBar: UIView {
         addSubview(backgroundShapeView)
     }
 
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hitView = super.hitTest(point, with: event)
+        return hitView === self ? nil : hitView
+    }
+
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -550,6 +555,11 @@ final class NativeNavigationChromeContainer: UIView {
         ))
         return expandedBounds.contains(point)
     }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hitView = super.hitTest(point, with: event)
+        return hitView === self ? nil : hitView
+    }
 }
 
 final class NativeNavigationBar: UINavigationBar {
@@ -563,6 +573,20 @@ final class NativeNavigationBar: UINavigationBar {
             right: -hitSlop.right
         ))
         return expandedBounds.contains(point)
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard let hitView = super.hitTest(point, with: event) else {
+            return nil
+        }
+        var candidate: UIView? = hitView
+        while let view = candidate, view !== self {
+            if view is UIControl {
+                return hitView
+            }
+            candidate = view.superview
+        }
+        return nil
     }
 }
 
