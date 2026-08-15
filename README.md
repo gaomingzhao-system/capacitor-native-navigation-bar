@@ -255,15 +255,15 @@ name are identical to the previous release.
 The table compares this package with Cap-go 8.3.0 and lists build and native
 implementation differences only.
 
-| Area | This package | Cap-go package |
-| --- | --- | --- |
-| Capacitor baseline | Capacitor 7 only (`@capacitor/core: ^7.0.0`) | Capacitor 8+ peer range (`@capacitor/core: >=8.0.0`), developed against 8.x |
-| JavaScript output | ESM only through `dist/index.js` | ESM, CommonJS, and IIFE/UMD through `module`, `main`, and `unpkg` |
-| Build toolchain | TypeScript 7 native compiler, `tsdown`, pnpm 11.9, Node.js 22.13+ | TypeScript 5.9, `tsc`, Rollup, Bun scripts, Node.js 22+ |
-| iOS SwiftPM dependency | `capacitor-swift-pm` from `7.0.0`; product `CapacitorNativeNavigationBar` | `capacitor-swift-pm` from `8.0.0`; product `CapgoCapacitorNativeNavigation` |
-| Android build baseline | Fallback SDK 35, AGP 8.7.2, Java 17 bytecode | Fallback SDK 36, AGP 8.13.0, Java 21 bytecode |
-| Android minimum SDK | Hard-enforced `minSdkVersion 24` | Uses the host `minSdkVersion` when supplied; fallback is 24 |
-| Transition recovery | iOS and Android watchdog plus immediate recovery when the app is backgrounded | No equivalent recovery path in the current native implementation |
+| Area                       | This package                                                                                                        | Cap-go package                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Capacitor baseline         | Capacitor 7 only (`@capacitor/core: ^7.0.0`)                                                                        | Capacitor 8+ peer range (`@capacitor/core: >=8.0.0`), developed against 8.x               |
+| JavaScript output          | ESM only through `dist/index.js`                                                                                    | ESM, CommonJS, and IIFE/UMD through `module`, `main`, and `unpkg`                         |
+| Build toolchain            | TypeScript 7 native compiler, `tsdown`, pnpm 11.9, Node.js 22.13+                                                   | TypeScript 5.9, `tsc`, Rollup, Bun scripts, Node.js 22+                                   |
+| iOS SwiftPM dependency     | `capacitor-swift-pm` from `7.0.0`; product `CapacitorNativeNavigationBar`                                           | `capacitor-swift-pm` from `8.0.0`; product `CapgoCapacitorNativeNavigation`               |
+| Android build baseline     | Fallback SDK 35, AGP 8.7.2, Java 17 bytecode                                                                        | Fallback SDK 36, AGP 8.13.0, Java 21 bytecode                                             |
+| Android minimum SDK        | Hard-enforced `minSdkVersion 24`                                                                                    | Uses the host `minSdkVersion` when supplied; fallback is 24                               |
+| Transition recovery        | iOS and Android watchdog plus immediate recovery when the app is backgrounded                                       | No equivalent recovery path in the current native implementation                          |
 | Android resize and cleanup | Re-layouts on content-root size changes, removes native views/listeners on destroy, and recycles transition bitmaps | No corresponding root-size observer, teardown path, or explicit transition-bitmap recycle |
 
 ## License
