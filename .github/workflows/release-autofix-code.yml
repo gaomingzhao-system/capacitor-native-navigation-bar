@@ -1,0 +1,70 @@
+name: One-time validated code autofix
+
+on:
+  push:
+    branches:
+      - agent/npm-release-readiness
+
+permissions:
+  contents: write
+
+jobs:
+  autofix-code:
+    if: contains(github.event.head_commit.message, '[release-code-autofix]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/npm-release-readiness
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".node-version"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply the validated correction script
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+          import textwrap
+
+          workflow = Path('.github/workflows/release-autofix.yml').read_text()
+          match = re.search(
+              r"(?ms)^      - name: Apply release corrections\n"
+              r"        run: \|\n"
+              r"          python3 <<'PY'\n"
+              r"(?P<body>.*?)"
+              r"^          PY$",
+              workflow,
+          )
+          if match is None:
+              raise RuntimeError('validated correction script was not found')
+          body = textwrap.dedent(match.group('body'))
+          exec(compile(body, 'release-autofix-extracted.py', 'exec'))
+          PY
+      - name: Format source files
+        run: pnpm run fmt
+      - name: Keep workflow edits for a connector-authenticated commit
+        run: git restore .github/workflows/ci.yml .github/workflows/release.yml
+      - name: Verify generated code and package
+        run: |
+          git diff --check
+          pnpm run lint
+          pnpm run test
+          pnpm run build
+          pnpm run check:package
+      - name: Commit validated non-workflow corrections
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "fix: resolve native and package release blockers"
+          git push origin HEAD:agent/npm-release-readiness
