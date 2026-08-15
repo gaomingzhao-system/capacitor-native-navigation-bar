@@ -227,6 +227,22 @@ pnpm run verify:android  # cd android && ./gradlew clean build test
 すべてのメソッド名、オプション/イベントの形状、カスタム要素名、CSS 変数名は
 以前のリリースと同一です。
 
+## [`@capgo/capacitor-native-navigation`](https://github.com/Cap-go/capacitor-native-navigation) との技術比較
+
+本パッケージと Cap-go 8.3.0 の、ビルド構成とネイティブ実装に関する主な違いだけを
+まとめています。
+
+| 項目 | 本パッケージ | Cap-go 版 |
+| --- | --- | --- |
+| Capacitor の基準 | Capacitor 7 のみ（`@capacitor/core: ^7.0.0`） | Capacitor 8+ の peer range（`@capacitor/core: >=8.0.0`）、開発基準は 8.x |
+| JavaScript 出力 | `dist/index.js` の ESM のみ | `module`・`main`・`unpkg` による ESM、CommonJS、IIFE/UMD |
+| ビルドツールチェーン | TypeScript 7 ネイティブコンパイラー、`tsdown`、pnpm 11.9、Node.js 22.13 以上 | TypeScript 5.9、`tsc`、Rollup、Bun スクリプト、Node.js 22 以上 |
+| iOS SwiftPM 依存関係 | `capacitor-swift-pm` の `7.0.0` 以上、product は `CapacitorNativeNavigationBar` | `capacitor-swift-pm` の `8.0.0` 以上、product は `CapgoCapacitorNativeNavigation` |
+| Android ビルド基準 | フォールバック SDK 35、AGP 8.7.2、Java 17 バイトコード | フォールバック SDK 36、AGP 8.13.0、Java 21 バイトコード |
+| Android 最低 SDK | `minSdkVersion 24` を固定して強制 | ホスト側の `minSdkVersion` があれば継承し、未指定時は 24 |
+| トランジション復旧 | iOS・Android のウォッチドッグと、バックグラウンド移行時の即時復旧 | 現在のネイティブ実装に同等の復旧処理なし |
+| Android のリサイズと解放 | content root のサイズ変更時に再レイアウトし、destroy 時にビュー／リスナーを削除し、トランジション Bitmap を recycle | 対応する root サイズ監視、teardown、トランジション Bitmap の明示的 recycle なし |
+
 ## ライセンス
 
 MPL-2.0。[LICENSE](./LICENSE) および [NOTICE](./NOTICE) を参照してください。
