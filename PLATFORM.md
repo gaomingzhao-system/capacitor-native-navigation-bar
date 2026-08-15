@@ -5,15 +5,15 @@ Platform, toolchain, runtime-safety, and release requirements for
 
 ## Compatibility matrix
 
-| Area | Supported baseline |
-| --- | --- |
-| Capacitor | 7.x only (`@capacitor/core: ^7.0.0`) |
-| Package format | ESM only |
-| JavaScript target | ES2020 |
-| Node.js | 22.13.0 or newer |
-| Package manager | pnpm 11.9.0 |
-| iOS | iOS 15.0 or newer |
-| Android | Android 11 / API 30 or newer |
+| Area              | Supported baseline                   |
+| ----------------- | ------------------------------------ |
+| Capacitor         | 7.x only (`@capacitor/core: ^7.0.0`) |
+| Package format    | ESM only                             |
+| JavaScript target | ES2020                               |
+| Node.js           | 22.13.0 or newer                     |
+| Package manager   | pnpm 11.9.0                          |
+| iOS               | iOS 15.0 or newer                    |
+| Android           | Android 11 / API 30 or newer         |
 
 Capacitor 8 is intentionally outside this release line. A future Capacitor 8
 release must use a separate major version and toolchain validation matrix.
@@ -30,13 +30,13 @@ building the bundle.
 
 ## iOS
 
-| Requirement | Value |
-| --- | --- |
-| Deployment target | 15.0 |
-| Xcode | 16 or newer |
-| Swift Package Manager | Supported |
-| CocoaPods | Supported |
-| Swift language version | 5.9 |
+| Requirement            | Value       |
+| ---------------------- | ----------- |
+| Deployment target      | 15.0        |
+| Xcode                  | 16 or newer |
+| Swift Package Manager  | Supported   |
+| CocoaPods              | Supported   |
+| Swift language version | 5.9         |
 
 The plugin deployment target is higher than the Capacitor 7 template default.
 Consuming applications must raise their Podfile and Xcode project deployment
@@ -52,18 +52,18 @@ simulator tests.
 
 ## Android
 
-| Requirement | Value |
-| --- | --- |
-| `minSdkVersion` | 30 |
-| `compileSdkVersion` | Host value; standalone fallback 36 |
-| `targetSdkVersion` | Host value; standalone fallback 36 |
-| JDK / Java bytecode | 21 |
-| Android Gradle Plugin | Standalone 8.13.2 |
-| Gradle wrapper | 8.14.3 |
-| AppCompat | 1.7.1 |
-| AndroidX Core | 1.18.0 |
-| AndroidX Test JUnit | 1.3.0 |
-| Espresso | 3.7.0 |
+| Requirement           | Value                              |
+| --------------------- | ---------------------------------- |
+| `minSdkVersion`       | 30                                 |
+| `compileSdkVersion`   | Host value; standalone fallback 36 |
+| `targetSdkVersion`    | Host value; standalone fallback 36 |
+| JDK / Java bytecode   | 21                                 |
+| Android Gradle Plugin | Standalone 8.13.2                  |
+| Gradle wrapper        | 8.14.3                             |
+| AppCompat             | 1.7.1                              |
+| AndroidX Core         | 1.18.0                             |
+| AndroidX Test JUnit   | 1.3.0                              |
+| Espresso              | 3.7.0                              |
 
 `minSdkVersion 30` is a hard library floor. It is deliberately not inherited
 from the host application because doing so would allow an API-23 application
@@ -80,11 +80,11 @@ chrome can draw edge-to-edge. This applies to the entire host Activity.
 
 ### Android feature availability
 
-| Feature | Minimum API | Fallback |
-| --- | --- | --- |
-| Typed system-bar and display-cutout insets | 30 | Baseline requirement |
-| `RenderEffect` glass blur | 31 | Translucent surface on Android 11 |
-| Dynamic Material You colors | 31 | Static configured colors |
+| Feature                                    | Minimum API | Fallback                          |
+| ------------------------------------------ | ----------- | --------------------------------- |
+| Typed system-bar and display-cutout insets | 30          | Baseline requirement              |
+| `RenderEffect` glass blur                  | 31          | Translucent surface on Android 11 |
+| Dynamic Material You colors                | 31          | Static configured colors          |
 
 ## JavaScript/native state parity
 

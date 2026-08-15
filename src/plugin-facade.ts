@@ -148,12 +148,14 @@ export const createNativeNavigationFacade = (
   const ensureTabSelectionObserver = (): Promise<void> => {
     if (observerRegistration) return observerRegistration;
 
-    const addListener = (bridge as unknown as {
-      addListener?: (
-        eventName: "tabSelect",
-        listener: (event: { id: string }) => void,
-      ) => Promise<unknown>;
-    }).addListener;
+    const addListener = (
+      bridge as unknown as {
+        addListener?: (
+          eventName: "tabSelect",
+          listener: (event: { id: string }) => void,
+        ) => Promise<unknown>;
+      }
+    ).addListener;
     if (typeof addListener !== "function") {
       observerRegistration = Promise.resolve();
       return observerRegistration;

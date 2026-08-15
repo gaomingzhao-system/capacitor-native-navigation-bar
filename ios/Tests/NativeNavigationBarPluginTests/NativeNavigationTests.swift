@@ -259,7 +259,7 @@ class NativeNavigationTests: XCTestCase {
 
         XCTAssertNil(SVGIconRenderer.render(svg: svg, size: .zero))
         XCTAssertNil(SVGIconRenderer.render(svg: svg, size: CGSize(width: 513, height: 24)))
-        XCTAssertNil(SVGIconRenderer.render(svg: svg, size: CGSize(width: .infinity, height: 24)))
+        XCTAssertNil(SVGIconRenderer.render(svg: svg, size: CGSize(width: CGFloat.infinity, height: 24)))
         XCTAssertTrue(nativeNavigationIsValidSVGIconSize(CGSize(width: 24, height: 24)))
     }
 
@@ -327,10 +327,10 @@ class NativeNavigationTests: XCTestCase {
             CGRect(x: -100, y: 20, width: 300, height: 400)
         ))
         XCTAssertFalse(nativeNavigationIsSafeTransitionRect(
-            CGRect(x: .greatestFiniteMagnitude, y: 0, width: 100, height: 100)
+            CGRect(x: CGFloat.greatestFiniteMagnitude, y: 0, width: 100, height: 100)
         ))
         XCTAssertFalse(nativeNavigationIsSafeTransitionRect(
-            CGRect(x: .infinity, y: 0, width: 100, height: 100)
+            CGRect(x: CGFloat.infinity, y: 0, width: 100, height: 100)
         ))
         XCTAssertFalse(nativeNavigationIsSafeTransitionRect(
             CGRect(x: 0, y: 0, width: 4_097, height: 100)

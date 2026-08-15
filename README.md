@@ -21,9 +21,8 @@ route underneath.
 | iOS deployment target           | 15.0         | higher than Capacitor 7's own 14.0 — see below |
 | Android `minSdk`                | 30 (11)      | higher than Capacitor 7's own 23 — see below   |
 
-Capacitor 8 support is **not** included in this release; see
-[Migrating from the 1.x / Capacitor 7+8 release](#migrating-from-the-1x--capacitor-78-release)
-below.
+Version **7.2.0** is the first public npm release. The package major follows
+the supported Capacitor major, so this release line supports Capacitor 7 only.
 
 ### Your app's floors must meet this plugin's floors
 
@@ -240,28 +239,13 @@ pnpm run verify:android  # cd android && ./gradlew clean build test
 
 `pnpm run verify:ios:test` runs the Swift unit tests on an iOS Simulator.
 
-## Migrating from the 1.x / Capacitor 7+8 release
+## Versioning
 
-This release (2.0.0) is a deliberate breaking change from the earlier
-dual-Capacitor, dual-module-format release:
-
-1. **ESM only.** If your build tooling cannot consume a pure-ESM dependency
-   (no `require()`, no IIFE/CDN bundle), stay on the previous release until you
-   can upgrade your tooling.
-2. **Capacitor 7 only.** `peerDependencies` is now `^7.0.0` instead of
-   `>=7.0.0 <10.0.0`. Capacitor 8 apps should stay on the previous release
-   until Capacitor 8 support ships as a separate release.
-3. **Higher native floors.** iOS 15.0 and Android API 30 — raise your app's
-   own floors as described above.
-4. **Node.js 22.13.0+ to build the package.** Only affects contributors
-   building from source; published `dist/` output is unaffected by the
-   Node.js version used to produce it. (Node 22 LTS itself started at
-   22.11.0; the extra two patch versions are pnpm 11.9.0's own minimum — see
-   [PLATFORM.md](./PLATFORM.md).)
-
-The plugin's own public API is unchanged: the `NativeNavigation` bridge name,
-every method name, option/event shape, custom-element name, and CSS variable
-name are identical to the previous release.
+Version **7.2.0** is the first public release of
+`capacitor-native-navigation-bar` on npm. No earlier `1.x` or `2.x` package
+version exists under this package name. The major version intentionally tracks
+the supported Capacitor major: `7.x` releases support Capacitor 7, while future
+Capacitor 8 support will use a separate `8.x` release line.
 
 ## Technical comparison with [`@capgo/capacitor-native-navigation`](https://github.com/Cap-go/capacitor-native-navigation)
 

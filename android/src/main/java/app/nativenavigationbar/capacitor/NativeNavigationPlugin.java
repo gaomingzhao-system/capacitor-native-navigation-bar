@@ -514,9 +514,7 @@ public class NativeNavigationPlugin extends Plugin {
             if (isNestedKey(key, nestedKeys) && value instanceof JSONObject) {
                 state.put(key, mergedObject(state.optJSONObject(key), (JSONObject) value));
             } else if (value == JSONObject.NULL) {
-                if (!isNestedKey(key, nestedKeys)) {
-                    state.put(key, JSONObject.NULL);
-                }
+                state.remove(key);
             } else if (value != null) {
                 state.put(key, value);
             }

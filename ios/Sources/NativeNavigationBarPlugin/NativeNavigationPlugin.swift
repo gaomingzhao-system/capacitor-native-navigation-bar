@@ -16,6 +16,11 @@ import UIKit
 
 private let nativeNavigationMaximumDurationMilliseconds = 60_000.0
 private let nativeNavigationMaximumLayoutDimension: CGFloat = 4_096
+private let nativeNavigationMaximumDecodedSVGBytes = 256 * 1_024
+private let nativeNavigationMaximumBase64SVGCharacters =
+    ((nativeNavigationMaximumDecodedSVGBytes + 2) / 3) * 4 + 4
+private let nativeNavigationMaximumPercentEncodedSVGCharacters =
+    nativeNavigationMaximumDecodedSVGBytes * 3
 
 func nativeNavigationMeasuredNavigationBarHeight(_ navBar: UINavigationBar, width: CGFloat) -> CGFloat {
     let safeWidth = width.isFinite && width > 0 ? min(width, nativeNavigationMaximumLayoutDimension) : 320
@@ -542,7 +547,9 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
                     style: tabbarStyle
                 )
                 tabBar.onSelect = { [weak self] _, item in
-                    self?.emitPluginEvent("tabSelect", data: [
+                    guard let self else { return }
+                    self.tabbarState["selectedId"] = item.id
+                    self.emitPluginEvent("tabSelect", data: [
                         "id": item.id,
                         "index": item.sourceIndex,
                         "title": item.title
@@ -967,6 +974,7 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
               !tabIds[index].isEmpty else {
             return
         }
+        tabbarState["selectedId"] = tabIds[index]
         emitPluginEvent("tabSelect", data: [
             "id": tabIds[index],
             "index": index,
@@ -1721,13 +1729,20 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             return nil
         }
         let payload = String(trimmed[trimmed.index(after: commaIndex)...])
-        if trimmed[..<commaIndex].contains(";base64") {
-            guard let data = Data(base64Encoded: payload) else {
+        if trimmed[..<commaIndex].lowercased().contains(";base64") {
+            guard payload.utf8.count <= nativeNavigationMaximumBase64SVGCharacters,
+                  let data = Data(base64Encoded: payload),
+                  data.count <= nativeNavigationMaximumDecodedSVGBytes else {
                 return nil
             }
             return String(data: data, encoding: .utf8)
         }
-        return payload.removingPercentEncoding
+        guard payload.utf8.count <= nativeNavigationMaximumPercentEncodedSVGCharacters,
+              let decoded = payload.removingPercentEncoding,
+              decoded.utf8.count <= nativeNavigationMaximumDecodedSVGBytes else {
+            return nil
+        }
+        return decoded
     }
 
     private func iconSize(from descriptor: [String: Any]) -> CGSize {
