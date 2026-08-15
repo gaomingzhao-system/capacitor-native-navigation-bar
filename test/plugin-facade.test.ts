@@ -51,15 +51,13 @@ describe("createNativeNavigationFacade", () => {
   it("persists a native tab selection before later partial updates", async () => {
     const raw = makeBridge();
     const plugin = createNativeNavigationFacade(raw.bridge);
-    await plugin.setTabbar({
-      tabs: [{ id: "home" }, { id: "search" }],
-      selectedId: "home",
-    });
+    const tabs = [{ id: "home" }, { id: "search" }];
+    await plugin.setTabbar({ tabs, selectedId: "home" });
 
     raw.emitTabSelect({ id: "search", index: 1, title: "Search" });
     await plugin.configure({});
 
-    expect(raw.setTabbar).toHaveBeenNthCalledWith(2, { selectedId: "search" });
+    expect(raw.setTabbar).toHaveBeenNthCalledWith(2, { selectedId: "search", tabs });
 
     await plugin.setTabbar({ colors: { tint: "#ff0000" } });
     expect(raw.setTabbar).toHaveBeenLastCalledWith({
@@ -68,7 +66,7 @@ describe("createNativeNavigationFacade", () => {
     });
   });
 
-  it("keeps earlier detached-role tabs as normal tabs when the last role wins", async () => {
+  it("keeps earlier visible detached-role tabs as normal tabs when the last role wins", async () => {
     const raw = makeBridge();
     const plugin = createNativeNavigationFacade(raw.bridge);
 
@@ -88,6 +86,70 @@ describe("createNativeNavigationFacade", () => {
         { id: "home" },
         { id: "search-a", role: "normal" },
         { id: "prominent", role: "normal" },
+        { id: "search-b", role: "search" },
+      ],
+    });
+  });
+
+  it("ignores a hidden trailing role when choosing the detached visible tab", async () => {
+    const raw = makeBridge();
+    const plugin = createNativeNavigationFacade(raw.bridge);
+    const tabs = [
+      { id: "home" },
+      { id: "search-visible", role: "search" as const },
+      { id: "search-hidden", role: "search" as const, hidden: true },
+    ];
+
+    await plugin.setTabbar({ selectedId: "home", tabs });
+
+    expect(raw.setTabbar).toHaveBeenCalledWith({ selectedId: "home", tabs });
+  });
+
+  it("re-evaluates detached roles when a hidden role becomes selected", async () => {
+    const raw = makeBridge();
+    const plugin = createNativeNavigationFacade(raw.bridge);
+    const tabs = [
+      { id: "home" },
+      { id: "search-visible", role: "search" as const },
+      { id: "search-hidden", role: "search" as const, hidden: true },
+    ];
+    await plugin.setTabbar({ selectedId: "home", tabs });
+
+    await plugin.setTabbar({ selectedId: "search-hidden" });
+
+    expect(raw.setTabbar).toHaveBeenLastCalledWith({
+      selectedId: "search-hidden",
+      tabs: [
+        { id: "home" },
+        { id: "search-visible", role: "normal" },
+        { id: "search-hidden", role: "search", hidden: true },
+      ],
+    });
+  });
+
+  it("preserves role declarations for curve bars and restores floating normalization", async () => {
+    const raw = makeBridge();
+    const plugin = createNativeNavigationFacade(raw.bridge);
+    const tabs = [
+      { id: "home" },
+      { id: "search-a", role: "search" as const },
+      { id: "search-b", role: "search" as const },
+    ];
+
+    await plugin.setTabbar({ selectedId: "home", style: { shape: "curve" }, tabs });
+    expect(raw.setTabbar).toHaveBeenLastCalledWith({
+      selectedId: "home",
+      style: { shape: "curve" },
+      tabs,
+    });
+
+    await plugin.setTabbar({ style: { shape: "floating" } });
+    expect(raw.setTabbar).toHaveBeenLastCalledWith({
+      selectedId: "home",
+      style: { shape: "floating" },
+      tabs: [
+        { id: "home" },
+        { id: "search-a", role: "normal" },
         { id: "search-b", role: "search" },
       ],
     });
