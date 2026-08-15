@@ -1383,7 +1383,9 @@ public class NativeNavigationPlugin extends Plugin {
                 String svg = new String(decoded, StandardCharsets.UTF_8);
                 return SvgIconRenderer.isSafeSvg(svg) ? svg : null;
             }
-            String svg = URLDecoder.decode(payload, StandardCharsets.UTF_8);
+            // The Charset overload was added in API 33. Keep the Android 11
+            // baseline by using the API 1 charset-name overload instead.
+            String svg = URLDecoder.decode(payload, StandardCharsets.UTF_8.name());
             return SvgIconRenderer.isSafeSvg(svg) ? svg : null;
         } catch (Exception ignored) {
             return null;

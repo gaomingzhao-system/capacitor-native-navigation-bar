@@ -71,13 +71,23 @@ const swiftJsName = match(
   /public let jsName = "([^"]+)"/,
   "iOS jsName",
 );
+const androidPlugin = read(
+  "android/src/main/java/app/nativenavigationbar/capacitor/NativeNavigationPlugin.java",
+);
 const javaName = match(
-  read("android/src/main/java/app/nativenavigationbar/capacitor/NativeNavigationPlugin.java"),
+  androidPlugin,
   /@CapacitorPlugin\(name = "([^"]+)"\)/,
   "Android @CapacitorPlugin",
 );
 check("iOS jsName vs registerPlugin", swiftJsName, jsBridgeName);
 check("Android plugin name vs registerPlugin", javaName, jsBridgeName);
+
+// URLDecoder.decode(String, Charset) was added in API 33. This project targets
+// Android 11/API 30 without core-library desugaring, so only the charset-name
+// overload is safe across the supported range.
+if (/URLDecoder\.decode\([^,]+,\s*StandardCharsets\.[A-Z0-9_]+\s*\)/.test(androidPlugin)) {
+  failures.push("Android URLDecoder must use the API 1 charset-name overload");
+}
 
 // 2 + 3. iOS packaging identifiers.
 const podspec = read(`${iosName}.podspec`);
