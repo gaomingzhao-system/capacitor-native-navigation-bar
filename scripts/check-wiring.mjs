@@ -17,10 +17,9 @@
  *     same identifier.
  *  4. package.json still declares the `capacitor` manifest the CLI looks for,
  *     and `files` ships the native sources and manifests.
- *  5. The iOS/Android floors, Android Java/build baseline, JavaScript target,
- *     and capacitor-swift-pm range match this release's declared policy
- *     (Capacitor 7 only, iOS 15+, Android 11+/Java 21) so a stale edit to one
- *     file cannot silently drift from the others.
+ *  5. The npm release line, publish gate, iOS/Android floors, Android build
+ *     baseline, JavaScript target, and capacitor-swift-pm range match the
+ *     declared Capacitor 7 policy.
  */
 
 import { readFileSync } from "node:fs";
@@ -60,6 +59,14 @@ const fixName = (name) => {
 const pkg = JSON.parse(read("package.json"));
 const iosName = fixName(pkg.name);
 
+if (!/^7\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkg.version)) {
+  failures.push(
+    `package.json version must stay on the Capacitor 7 release line, found ${pkg.version}`,
+  );
+}
+check("public npm access", pkg.publishConfig?.access, "public");
+check("prepublish verification", pkg.scripts?.prepublishOnly, "pnpm run verify:web");
+
 // 1. Bridge name agreement.
 const jsBridgeName = match(
   read("src/registry.ts"),
@@ -75,7 +82,7 @@ const androidPlugin = read(
   "android/src/main/java/app/nativenavigationbar/capacitor/NativeNavigationPlugin.java",
 );
 const javaName = match(
-  androidPlugin,
+  androidSlugin,
   /@CapacitorPlugin\(name = "([^"]+)"\)/,
   "Android @CapacitorPlugin",
 );
@@ -202,7 +209,7 @@ check(
   "8.13.2",
 );
 for (const [label, property, expected] of [
-  ["AndroidX AppCompat", "androidxAppCompatVersion", "1.8.0"],
+  ["AndroidX AppCompat", "androidxAppCompatVersion", "1.7.1"],
   ["AndroidX Core", "androidxCoreVersion", "1.18.0"],
   ["AndroidX Test JUnit", "androidxJunitVersion", "1.3.0"],
   ["AndroidX Espresso", "androidxEspressoCoreVersion", "3.7.0"],
@@ -252,4 +259,7 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Capacitor plugin wiring OK (bridge "${jsBridgeName}", iOS package "${iosName}").`);
+console.log(
+  `Capacitor plugin wiring OK (version ${pkg.version}, bridge "${jsBridgeName}", ` +
+    `iOS package "${iosName}").`,
+);

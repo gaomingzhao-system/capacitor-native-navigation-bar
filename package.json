@@ -1,6 +1,6 @@
 {
   "name": "capacitor-native-navigation-bar",
-  "version": "2.0.0",
+  "version": "7.2.0",
   "description": "Capacitor 7 plugin (ESM-only) for native navbar, tabbar, safe-area handling, and WebView snapshot transitions.",
   "keywords": [
     "capacitor",
@@ -44,6 +44,9 @@
     },
     "./package.json": "./package.json"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "clean": "rimraf dist",
     "build": "pnpm run clean && tsdown --config-loader native",
@@ -60,7 +63,7 @@
     "verify:ios:test": "xcodebuild test -scheme CapacitorNativeNavigationBar -destination 'platform=iOS Simulator,name=iPhone 17 Pro'",
     "verify:android": "cd android && ./gradlew clean build test",
     "check:wiring": "node scripts/check-wiring.mjs",
-    "prepublishOnly": "pnpm run build",
+    "prepublishOnly": "pnpm run verify:web",
     "check:package": "publint --strict && attw --pack . --profile esm-only"
   },
   "devDependencies": {

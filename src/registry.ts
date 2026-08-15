@@ -5,6 +5,7 @@
 import { registerPlugin } from "@capacitor/core";
 
 import type { NativeNavigationPlugin } from "./definitions";
+import { createNativeNavigationFacade } from "./plugin-facade";
 import { createNativeNavigationWeb } from "./plugin";
 
 /*
@@ -15,6 +16,8 @@ import { createNativeNavigationWeb } from "./plugin";
  * The bridge name `NativeNavigation` is the wire identity shared with the iOS
  * `jsName` and the Android `@CapacitorPlugin(name)` annotation.
  */
-export const NativeNavigation = registerPlugin<NativeNavigationPlugin>("NativeNavigation", {
+const nativeNavigationBridge = registerPlugin<NativeNavigationPlugin>("NativeNavigation", {
   web: createNativeNavigationWeb,
 });
+
+export const NativeNavigation = createNativeNavigationFacade(nativeNavigationBridge);

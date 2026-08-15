@@ -1,0 +1,131 @@
+name: Release npm package
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: Version expected in package.json
+        required: true
+        default: "7.2.0"
+        type: string
+      npm_tag:
+        description: npm dist-tag
+        required: true
+        default: latest
+        type: choice
+        options:
+          - latest
+          - next
+
+concurrency:
+  group: npm-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  web:
+    name: Web release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run verify:web
+
+  ios:
+    name: iOS release gate
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Swift package
+        run: xcodebuild -scheme CapacitorNativeNavigationBar -destination "generic/platform=iOS" build
+      - name: Resolve an available iOS Simulator
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available --json \
+            | python3 -c "import json,sys; data=json.load(sys.stdin)['devices']; \
+              runtimes=sorted((key for key in data if 'iOS' in key), reverse=True); \
+              print(next(device['udid'] for runtime in runtimes for device in data[runtime] if device['name'].startswith('iPhone')))")
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Run Swift tests
+        run: xcodebuild test -scheme CapacitorNativeNavigationBar -destination "id=${{ steps.sim.outputs.udid }}"
+
+  android:
+    name: Android release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Build Android library and run tests
+        working-directory: android
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          ./gradlew clean build test --no-daemon
+
+  publish:
+    name: Publish to npm
+    needs: [web, ios, android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+      - run: pnpm install --frozen-lockfile
+      - name: Validate release branch and version
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main" || {
+            echo "Releases must run from main; received $GITHUB_REF" >&2
+            exit 1
+          }
+          node -e '
+            const pkg = require("./package.json");
+            if (pkg.version !== process.env.EXPECTED_VERSION) {
+              throw new Error(`package.json is ${pkg.version}, expected ${process.env.EXPECTED_VERSION}`);
+            }
+          '
+      - name: Ensure the version is not already published
+        run: |
+          package_name=$(node -p 'require("./package.json").name')
+          package_version=$(node -p 'require("./package.json").version')
+          if npm view "$package_name@$package_version" version >/dev/null 2>&1; then
+            echo "$package_name@$package_version already exists on npm" >&2
+            exit 1
+          fi
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TAG: ${{ inputs.npm_tag }}
+        run: npm publish --access public --provenance --tag "$NPM_TAG"
