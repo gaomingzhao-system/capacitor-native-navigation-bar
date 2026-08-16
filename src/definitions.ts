@@ -2,13 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import type { PluginListenerHandle } from "@capacitor/core";
+import type { PluginListenerHandle } from "@capacitor/core"
 
 /** Platform rendering preference for the native bars. */
-export type NativeNavigationPlatformStyle = "auto" | "ios" | "android";
+export type NativeNavigationPlatformStyle = "auto" | "ios" | "android"
 
 /** How the plugin exposes native bar sizes to web content. */
-export type NativeNavigationContentInsetMode = "css" | "none";
+export type NativeNavigationContentInsetMode = "css" | "none"
 
 /** Navigation animation direction. */
 export type NativeNavigationTransitionDirection =
@@ -17,7 +17,7 @@ export type NativeNavigationTransitionDirection =
   | "root"
   | "tab"
   | "zoom"
-  | "none";
+  | "none"
 
 /** Native material/blur effect preference. */
 export type NativeNavigationBlurEffect =
@@ -42,10 +42,10 @@ export type NativeNavigationBlurEffect =
   | "systemThinMaterialDark"
   | "systemMaterialDark"
   | "systemThickMaterialDark"
-  | "systemChromeMaterialDark";
+  | "systemChromeMaterialDark"
 
 /** Native glass background rendering preference. */
-export type NativeNavigationGlassEffect = "none" | "liquidGlass";
+export type NativeNavigationGlassEffect = "none" | "liquidGlass"
 
 /** Native glass background configuration. */
 export interface NativeNavigationGlassOptions {
@@ -55,31 +55,31 @@ export interface NativeNavigationGlassOptions {
    * uses the platform-owned Liquid Glass behavior when the running OS provides
    * it, and a blur material otherwise.
    */
-  effect?: NativeNavigationGlassEffect;
+  effect?: NativeNavigationGlassEffect
 
   /** Android blur radius in native dp for `liquidGlass`. Defaults to `18`. */
-  blurRadius?: number;
+  blurRadius?: number
 
   /**
    * Alpha multiplier for the tint surface over the glass backdrop. Defaults to
    * `0.62`.
    */
-  surfaceAlpha?: number;
+  surfaceAlpha?: number
 }
 
 /** Native tab label visibility behavior. */
-export type NativeNavigationTabLabelVisibilityMode = "auto" | "selected" | "labeled" | "unlabeled";
+export type NativeNavigationTabLabelVisibilityMode = "auto" | "selected" | "labeled" | "unlabeled"
 
 /** A rectangle in WebView viewport coordinates, expressed in native points/dp. */
 export interface NativeNavigationRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 /** Native tabbar background shape. */
-export type NativeNavigationTabbarShape = "floating" | "curve";
+export type NativeNavigationTabbarShape = "floating" | "curve"
 
 /**
  * Native tab role for Liquid Glass tab bars.
@@ -90,7 +90,7 @@ export type NativeNavigationTabbarShape = "floating" | "curve";
  * set `search` or `prominent`, the last one wins. Curve-shaped bars ignore
  * `role` and keep using the included center action instead.
  */
-export type NativeNavigationTabRole = "normal" | "search" | "prominent";
+export type NativeNavigationTabRole = "normal" | "search" | "prominent"
 
 /**
  * A serializable icon descriptor. Framework nodes are intentionally not accepted
@@ -101,7 +101,7 @@ export interface NativeNavigationIcon {
    * Cross-platform inline SVG, `data:image/svg+xml` URI, or bundled resource
    * name. Remote URLs and filesystem paths are not fetched.
    */
-  src?: string;
+  src?: string
 
   /**
    * Cross-platform inline SVG markup. The native renderers support common icon
@@ -109,43 +109,43 @@ export interface NativeNavigationIcon {
    * are rendered as template images by default so native tint colors still
    * apply.
    */
-  svg?: string;
+  svg?: string
 
   /** Preferred rendered icon width in native points/dp. Defaults to `24`. */
-  width?: number;
+  width?: number
 
   /** Preferred rendered icon height in native points/dp. Defaults to `24`. */
-  height?: number;
+  height?: number
 
   /**
    * When `true`, native tint colors are applied to the rendered SVG/image.
    * Defaults to `true`.
    */
-  template?: boolean;
+  template?: boolean
 
   /** iOS-specific SF Symbol, bundled image name, or inline SVG. */
   ios?: {
     /** SF Symbol name, for example `house.fill`. */
-    sfSymbol?: string;
+    sfSymbol?: string
 
     /** Bundled image name from the app asset catalog. */
-    image?: string;
+    image?: string
 
     /** iOS-specific inline SVG markup. */
-    svg?: string;
-  };
+    svg?: string
+  }
 
   /** Android-specific drawable/mipmap resource name or inline SVG. */
   android?: {
     /** Drawable resource name without the `R.drawable.` prefix. */
-    resource?: string;
+    resource?: string
 
     /** Bundled drawable/mipmap resource name (legacy alias of `resource`). */
-    image?: string;
+    image?: string
 
     /** Android-specific inline SVG markup. */
-    svg?: string;
-  };
+    svg?: string
+  }
 }
 
 /** Native bar colors. Use CSS-style hex strings (`#RRGGBB` or `#AARRGGBB`). */
@@ -154,158 +154,158 @@ export interface NativeNavigationColors {
    * When `true`, Android 12+ derives unspecified bar colors from Material You
    * system palettes. Explicit color fields still win.
    */
-  dynamic?: boolean;
+  dynamic?: boolean
 
   /** Tint color for active buttons/items. */
-  tint?: string;
+  tint?: string
 
   /**
    * Color for inactive tab items. Ignored on iOS 26+ unless
    * `experimentalBakedTintColors` is enabled.
    */
-  inactiveTint?: string;
+  inactiveTint?: string
 
   /**
    * Optional background tint. Ignored on iOS 26+ so UIKit can preserve the
    * system Liquid Glass navigation appearance.
    */
-  background?: string;
+  background?: string
 
   /** Title and label text color where the native platform supports it. */
-  foreground?: string;
+  foreground?: string
 
   /** Badge background color for native tab badges. */
-  badgeBackground?: string;
+  badgeBackground?: string
 
   /** Badge text color for native tab badges. */
-  badgeText?: string;
+  badgeText?: string
 
   /** Active tab indicator color on Android. */
-  indicator?: string;
+  indicator?: string
 
   /** Tab press ripple color on Android. */
-  ripple?: string;
+  ripple?: string
 }
 
 /** Global plugin configuration. */
 export interface NativeNavigationConfigureOptions {
   /** Enables or disables the native chrome host. */
-  enabled?: boolean;
+  enabled?: boolean
 
   /** Native style preference. `auto` uses the current platform. */
-  platformStyle?: NativeNavigationPlatformStyle;
+  platformStyle?: NativeNavigationPlatformStyle
 
   /** When `css`, the plugin writes CSS variables on `document.documentElement`. */
-  contentInsetMode?: NativeNavigationContentInsetMode;
+  contentInsetMode?: NativeNavigationContentInsetMode
 
   /** Default native transition duration in milliseconds. */
-  animationDuration?: number;
+  animationDuration?: number
 
   /** Shared color hints for native bars. */
-  colors?: NativeNavigationColors;
+  colors?: NativeNavigationColors
 
   /** Shared glass background defaults for native bars. */
-  glass?: NativeNavigationGlassOptions;
+  glass?: NativeNavigationGlassOptions
 }
 
 /** A button shown in the native navbar. */
 export interface NativeNavigationBarButton {
   /** Stable id returned in `navbarItemTap`. */
-  id: string;
+  id: string
 
   /** Visible text label. */
-  title?: string;
+  title?: string
 
   /** Native icon descriptor. */
-  icon?: NativeNavigationIcon;
+  icon?: NativeNavigationIcon
 
   /** Whether the action is enabled. Defaults to `true`. */
-  enabled?: boolean;
+  enabled?: boolean
 }
 
 /** Native back button configuration. */
 export interface NativeNavigationBackButton {
   /** Show the native back affordance. */
-  visible?: boolean;
+  visible?: boolean
 
   /** Optional back title. */
-  title?: string;
+  title?: string
 }
 
 /** Native navbar state. */
 export interface NativeNavigationNavbarOptions {
   /** Hide the native navbar. */
-  hidden?: boolean;
+  hidden?: boolean
 
   /** Main title. */
-  title?: string;
+  title?: string
 
   /** Secondary title where supported by the platform. */
-  subtitle?: string;
+  subtitle?: string
 
   /** Prefer a large iOS title style. */
-  large?: boolean;
+  large?: boolean
 
   /** Prefer transparent/scroll-edge style. */
-  transparent?: boolean;
+  transparent?: boolean
 
   /**
    * iOS blur/material effect for the navbar background when glass is not
    * available. Defaults to `systemChromeMaterial` for transparent bars.
    */
-  blurEffect?: NativeNavigationBlurEffect;
+  blurEffect?: NativeNavigationBlurEffect
 
   /**
    * Optional glass background behavior. Overrides `configure({ glass })` for
    * this navbar update.
    */
-  glass?: NativeNavigationGlassOptions;
+  glass?: NativeNavigationGlassOptions
 
   /** Back button state. */
-  backButton?: NativeNavigationBackButton;
+  backButton?: NativeNavigationBackButton
 
   /** Left-side action buttons. */
-  leftItems?: NativeNavigationBarButton[];
+  leftItems?: NativeNavigationBarButton[]
 
   /** Right-side action buttons. */
-  rightItems?: NativeNavigationBarButton[];
+  rightItems?: NativeNavigationBarButton[]
 
   /** Navbar color hints. */
-  colors?: NativeNavigationColors;
+  colors?: NativeNavigationColors
 
   /** Animate native navbar changes. */
-  animated?: boolean;
+  animated?: boolean
 }
 
 /** A native tab item. */
 export interface NativeNavigationTab {
   /** Stable tab id returned in `tabSelect`. */
-  id: string;
+  id: string
 
   /** Visible tab label. */
-  title?: string;
+  title?: string
 
   /** Native icon descriptor. */
-  icon?: NativeNavigationIcon;
+  icon?: NativeNavigationIcon
 
   /** Optional selected-state icon. */
-  selectedIcon?: NativeNavigationIcon;
+  selectedIcon?: NativeNavigationIcon
 
   /**
    * Optional badge. Numeric badges are supported on both platforms; text badge
    * support depends on platform capabilities.
    */
-  badge?: string | number;
+  badge?: string | number
 
   /** Whether the tab is enabled. Defaults to `true`. */
-  enabled?: boolean;
+  enabled?: boolean
 
   /**
    * Hide the tab item from the native tabbar. When the hidden tab is selected,
    * native platform constraints may keep it visible until another tab is
    * selected.
    */
-  hidden?: boolean;
+  hidden?: boolean
 
   /**
    * Optional tab role. On floating tabbars, `search` (or `prominent` when
@@ -316,7 +316,7 @@ export interface NativeNavigationTab {
    * wins. Curve-shaped bars ignore `role` and keep using the included center
    * action. Defaults to `normal`.
    */
-  role?: NativeNavigationTabRole;
+  role?: NativeNavigationTabRole
 }
 
 /** Native tabbar layout and background shape options. */
@@ -328,263 +328,263 @@ export interface NativeNavigationTabbarStyle {
    * `UIGlassEffect` on iOS 26+ (blur material fallback otherwise). `curve`
    * draws a full-width bar with an included center action.
    */
-  shape?: NativeNavigationTabbarShape;
+  shape?: NativeNavigationTabbarShape
 
   /**
    * Bar height in native points/dp. Defaults to `64` for `floating` and `76`
    * for `curve`.
    */
-  height?: number;
+  height?: number
 
   /**
    * Horizontal margin in native points/dp. Defaults to `24` for `floating` and
    * `0` for `curve`.
    */
-  horizontalMargin?: number;
+  horizontalMargin?: number
 
   /**
    * Maximum tabbar width in native points/dp. Defaults to `430` for `floating`;
    * `curve` uses the available width unless this is set.
    */
-  maxWidth?: number;
+  maxWidth?: number
 
   /**
    * Bottom gap above the platform safe area in native points/dp. Defaults to
    * `10` for `floating` and `0` for `curve`.
    */
-  bottomGap?: number;
+  bottomGap?: number
 
   /**
    * Background corner radius in native points/dp. Defaults to a capsule radius
    * for `floating` and `0` for `curve`.
    */
-  cornerRadius?: number;
+  cornerRadius?: number
 
   /**
    * Tab id promoted into the included center button for `curve`. Defaults to
    * the middle tab.
    */
-  centerItemId?: string;
+  centerItemId?: string
 
   /** Included center button diameter in native points/dp. Defaults to `56`. */
-  centerButtonDiameter?: number;
+  centerButtonDiameter?: number
 
   /**
    * Distance from the top of the center button to the top edge of the bar in
    * native points/dp. Defaults to half of `centerButtonDiameter`.
    */
-  centerButtonLift?: number;
+  centerButtonLift?: number
 
   /** Included center button color. Defaults to the active tint color. */
-  centerButtonColor?: string;
+  centerButtonColor?: string
 
   /** Included center button icon color. Defaults to white. */
-  centerButtonIconColor?: string;
+  centerButtonIconColor?: string
 }
 
 /** Native tabbar state. */
 export interface NativeNavigationTabbarOptions {
   /** Hide the native tabbar. */
-  hidden?: boolean;
+  hidden?: boolean
 
   /** Tab definitions. */
-  tabs?: NativeNavigationTab[];
+  tabs?: NativeNavigationTab[]
 
   /** Currently selected tab id. */
-  selectedId?: string;
+  selectedId?: string
 
   /** Show text labels. Defaults to `true`. */
-  labels?: boolean;
+  labels?: boolean
 
   /** Native label visibility mode. Overrides `labels` when provided. */
-  labelVisibilityMode?: NativeNavigationTabLabelVisibilityMode;
+  labelVisibilityMode?: NativeNavigationTabLabelVisibilityMode
 
   /** Show icons. Defaults to `true`. */
-  icons?: boolean;
+  icons?: boolean
 
   /** Tabbar color hints. */
-  colors?: NativeNavigationColors;
+  colors?: NativeNavigationColors
 
   /**
    * iOS blur/material effect for the tabbar background when glass is not
    * available.
    */
-  blurEffect?: NativeNavigationBlurEffect;
+  blurEffect?: NativeNavigationBlurEffect
 
   /**
    * Optional glass background behavior. Overrides `configure({ glass })` for
    * this tabbar update.
    */
-  glass?: NativeNavigationGlassOptions;
+  glass?: NativeNavigationGlassOptions
 
   /**
    * Opt into the iOS 26 Liquid Glass tint workaround that renders active and
    * inactive tab items into baked images. This can affect badge positioning
    * and icon sizing, so it is disabled by default.
    */
-  experimentalBakedTintColors?: boolean;
+  experimentalBakedTintColors?: boolean
 
   /**
    * Keep the iOS scroll-edge tabbar appearance from becoming transparent.
    * Mirrors Expo Router native tabs' `disableTransparentOnScrollEdge` option.
    * Defaults to `false`.
    */
-  disableTransparentOnScrollEdge?: boolean;
+  disableTransparentOnScrollEdge?: boolean
 
   /** Disable the Android active tab indicator. */
-  disableIndicator?: boolean;
+  disableIndicator?: boolean
 
   /** Active tab indicator color on Android. `colors.indicator` is also supported. */
-  indicatorColor?: string;
+  indicatorColor?: string
 
   /** Tab press ripple color on Android. `colors.ripple` is also supported. */
-  rippleColor?: string;
+  rippleColor?: string
 
   /** Badge background color. `colors.badgeBackground` is also supported. */
-  badgeBackgroundColor?: string;
+  badgeBackgroundColor?: string
 
   /** Badge text color. `colors.badgeText` is also supported. */
-  badgeTextColor?: string;
+  badgeTextColor?: string
 
   /** Optional native tabbar layout and shape customization. */
-  style?: NativeNavigationTabbarStyle;
+  style?: NativeNavigationTabbarStyle
 
   /** Animate native tabbar changes. */
-  animated?: boolean;
+  animated?: boolean
 }
 
 /** Insets exposed to web content. */
 export interface NativeNavigationInsets {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-  navbarHeight: number;
-  tabbarHeight: number;
+  top: number
+  right: number
+  bottom: number
+  left: number
+  navbarHeight: number
+  tabbarHeight: number
 }
 
 /** Returned by methods that may change safe content bounds. */
 export interface NativeNavigationInsetsResult {
-  insets: NativeNavigationInsets;
+  insets: NativeNavigationInsets
 }
 
 /** Begin a native transition transaction before JS changes route content. */
 export interface NativeNavigationBeginTransitionOptions {
-  id?: string;
-  direction?: NativeNavigationTransitionDirection;
-  duration?: number;
+  id?: string
+  direction?: NativeNavigationTransitionDirection
+  duration?: number
   /** Source rectangle for `zoom` transitions. Use viewport coordinates such as
    * those returned by `Element.getBoundingClientRect()`. */
-  sourceRect?: NativeNavigationRect;
+  sourceRect?: NativeNavigationRect
   /** Destination rectangle for shared-element-style `zoom` transitions. */
-  targetRect?: NativeNavigationRect;
+  targetRect?: NativeNavigationRect
   /** Corner radius used while animating a `zoom` transition. */
-  cornerRadius?: number;
+  cornerRadius?: number
 }
 
 /** Finish a native transition transaction after JS has changed route content. */
 export interface NativeNavigationFinishTransitionOptions {
-  id?: string;
-  direction?: NativeNavigationTransitionDirection;
-  duration?: number;
+  id?: string
+  direction?: NativeNavigationTransitionDirection
+  duration?: number
   /** Source rectangle for `zoom` transitions when no active source was recorded. */
-  sourceRect?: NativeNavigationRect;
+  sourceRect?: NativeNavigationRect
   /** Destination rectangle for shared-element-style `zoom` transitions. */
-  targetRect?: NativeNavigationRect;
+  targetRect?: NativeNavigationRect
   /** Corner radius used while animating a `zoom` transition. */
-  cornerRadius?: number;
+  cornerRadius?: number
 }
 
 /** Native transition result. */
 export interface NativeNavigationTransitionResult {
-  id: string;
-  direction: NativeNavigationTransitionDirection;
-  duration: number;
+  id: string
+  direction: NativeNavigationTransitionDirection
+  duration: number
 }
 
 /** Plugin version payload. */
 export interface PluginVersionResult {
   /** Version identifier returned by the platform implementation. */
-  version: string;
+  version: string
 }
 
 export interface NativeNavigationBackEvent {
-  source: "navbar";
+  source: "navbar"
 }
 
 export interface NativeNavigationBarItemTapEvent {
-  id: string;
-  title?: string;
-  placement: "left" | "right";
+  id: string
+  title?: string
+  placement: "left" | "right"
 }
 
 export interface NativeNavigationTabSelectEvent {
-  id: string;
-  index: number;
-  title?: string;
+  id: string
+  index: number
+  title?: string
 }
 
 export interface NativeNavigationSafeAreaChangedEvent {
-  insets: NativeNavigationInsets;
+  insets: NativeNavigationInsets
 }
 
 export interface NativeNavigationTransitionEvent {
-  id: string;
-  direction: NativeNavigationTransitionDirection;
-  duration: number;
+  id: string
+  direction: NativeNavigationTransitionDirection
+  duration: number
 }
 
 /** Framework-agnostic native navigation chrome API. */
 export interface NativeNavigationPlugin {
   /** Configure the native chrome host and content inset behavior. */
-  configure(options?: NativeNavigationConfigureOptions): Promise<NativeNavigationInsetsResult>;
+  configure(options?: NativeNavigationConfigureOptions): Promise<NativeNavigationInsetsResult>
 
   /** Render or update the native navbar. */
-  setNavbar(options: NativeNavigationNavbarOptions): Promise<NativeNavigationInsetsResult>;
+  setNavbar(options: NativeNavigationNavbarOptions): Promise<NativeNavigationInsetsResult>
 
   /** Render or update the native tabbar. */
-  setTabbar(options: NativeNavigationTabbarOptions): Promise<NativeNavigationInsetsResult>;
+  setTabbar(options: NativeNavigationTabbarOptions): Promise<NativeNavigationInsetsResult>
 
   /** Capture the current WebView and prepare a native transition. */
   beginTransition(
     options?: NativeNavigationBeginTransitionOptions,
-  ): Promise<NativeNavigationTransitionResult>;
+  ): Promise<NativeNavigationTransitionResult>
 
   /** Animate from the captured WebView snapshot to the current live WebView. */
   finishTransition(
     options?: NativeNavigationFinishTransitionOptions,
-  ): Promise<NativeNavigationTransitionResult>;
+  ): Promise<NativeNavigationTransitionResult>
 
   /** Returns the platform implementation version marker. */
-  getPluginVersion(): Promise<PluginVersionResult>;
+  getPluginVersion(): Promise<PluginVersionResult>
 
   addListener(
     eventName: "navbarBack",
     listenerFunc: (event: NativeNavigationBackEvent) => void,
-  ): Promise<PluginListenerHandle>;
+  ): Promise<PluginListenerHandle>
 
   addListener(
     eventName: "navbarItemTap",
     listenerFunc: (event: NativeNavigationBarItemTapEvent) => void,
-  ): Promise<PluginListenerHandle>;
+  ): Promise<PluginListenerHandle>
 
   addListener(
     eventName: "tabSelect",
     listenerFunc: (event: NativeNavigationTabSelectEvent) => void,
-  ): Promise<PluginListenerHandle>;
+  ): Promise<PluginListenerHandle>
 
   addListener(
     eventName: "safeAreaChanged",
     listenerFunc: (event: NativeNavigationSafeAreaChangedEvent) => void,
-  ): Promise<PluginListenerHandle>;
+  ): Promise<PluginListenerHandle>
 
   addListener(
     eventName: "transitionStart",
     listenerFunc: (event: NativeNavigationTransitionEvent) => void,
-  ): Promise<PluginListenerHandle>;
+  ): Promise<PluginListenerHandle>
 
   addListener(
     eventName: "transitionEnd",
     listenerFunc: (event: NativeNavigationTransitionEvent) => void,
-  ): Promise<PluginListenerHandle>;
+  ): Promise<PluginListenerHandle>
 }

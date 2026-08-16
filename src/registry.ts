@@ -2,11 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { registerPlugin } from "@capacitor/core";
+import { registerPlugin } from "@capacitor/core"
 
-import type { NativeNavigationPlugin } from "./definitions";
-import { createNativeNavigationFacade } from "./plugin-facade";
-import { createNativeNavigationWeb } from "./plugin";
+import type { NativeNavigationPlugin } from "./definitions"
+import { createNativeNavigationFacade } from "./plugin-facade"
+import { createNativeNavigationWeb } from "./plugin"
 
 /*
  * Plugin registration lives in its own module so that both the public entry
@@ -18,6 +18,6 @@ import { createNativeNavigationWeb } from "./plugin";
  */
 const nativeNavigationBridge = registerPlugin<NativeNavigationPlugin>("NativeNavigation", {
   web: createNativeNavigationWeb,
-});
+})
 
-export const NativeNavigation = createNativeNavigationFacade(nativeNavigationBridge);
+export const NativeNavigation = createNativeNavigationFacade(nativeNavigationBridge)

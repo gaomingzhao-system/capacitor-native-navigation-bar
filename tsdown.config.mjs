@@ -1,4 +1,4 @@
-import { defineConfig } from "tsdown";
+import { defineConfig } from "tsdown"
 
 /*
  * Plain .mjs, not .ts: this file has no TypeScript-only syntax, so nothing is
@@ -37,4 +37,4 @@ export default defineConfig({
   platform: "neutral",
   deps: { neverBundle: ["@capacitor/core"] },
   clean: true,
-});
+})

@@ -7,26 +7,26 @@ import type {
   NativeNavigationFinishTransitionOptions,
   NativeNavigationRect,
   NativeNavigationTransitionResult,
-} from "./definitions";
-import { NativeNavigation } from "./registry";
+} from "./definitions"
+import { NativeNavigation } from "./registry"
 
-export { NativeNavigation };
-export * from "./definitions";
-export { defineNativeNavigationElements } from "./components";
+export { NativeNavigation }
+export * from "./definitions"
+export { defineNativeNavigationElements } from "./components"
 
 /** A DOM element, DOMRect, or NativeNavigationRect convertible into viewport coordinates for zoom transitions. */
-export type NativeNavigationRectTarget = Element | DOMRect | NativeNavigationRect;
+export type NativeNavigationRectTarget = Element | DOMRect | NativeNavigationRect
 
 const isElement = (target: NativeNavigationRectTarget): target is Element =>
-  typeof Element !== "undefined" && target instanceof Element;
+  typeof Element !== "undefined" && target instanceof Element
 
 /** Convert an element or DOMRect into viewport coordinates accepted by native zoom transitions. */
 export const getNativeNavigationRect = (
   target: NativeNavigationRectTarget,
 ): NativeNavigationRect => {
-  const rect = isElement(target) ? target.getBoundingClientRect() : target;
-  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-};
+  const rect = isElement(target) ? target.getBoundingClientRect() : target
+  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+}
 
 /** Begin an Apple-Zoom-style native transition from a DOM element or rect. */
 export const beginZoomTransition = (
@@ -37,7 +37,7 @@ export const beginZoomTransition = (
     ...options,
     direction: "zoom",
     sourceRect: getNativeNavigationRect(target),
-  });
+  })
 
 /** Finish an Apple-Zoom-style native transition into an optional DOM element or rect on the destination route. */
 export const finishZoomTransition = (
@@ -48,4 +48,4 @@ export const finishZoomTransition = (
     ...options,
     direction: "zoom",
     targetRect: target ? getNativeNavigationRect(target) : undefined,
-  });
+  })

@@ -6,39 +6,38 @@ import type {
   NativeNavigationConfigureOptions,
   NativeNavigationNavbarOptions,
   NativeNavigationTabbarOptions,
-} from "./definitions";
-import { NativeNavigation } from "./registry";
+} from "./definitions"
+import { NativeNavigation } from "./registry"
 
 const parseBoolean = (value: string | null, defaultValue = false): boolean => {
-  if (value === null) return defaultValue;
-  return value === "" || value === "true" || value === "1";
-};
+  if (value === null) return defaultValue
+  return value === "" || value === "true" || value === "1"
+}
 
-const normalizeAttribute = (value: string | null): string | undefined =>
-  value ? value : undefined;
+const normalizeAttribute = (value: string | null): string | undefined => (value ? value : undefined)
 
 const typedAttribute = <T extends string>(element: Element, name: string): T | undefined =>
-  normalizeAttribute(element.getAttribute(name)) as T | undefined;
+  normalizeAttribute(element.getAttribute(name)) as T | undefined
 
 const nonNegativeFiniteNumberAttribute = (element: Element, name: string): number | undefined => {
-  const value = element.getAttribute(name);
-  if (value === null || value.trim() === "") return undefined;
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : undefined;
-};
+  const value = element.getAttribute(name)
+  if (value === null || value.trim() === "") return undefined
+  const number = Number(value)
+  return Number.isFinite(number) && number >= 0 ? number : undefined
+}
 
 const parseJsonAttribute = <T>(element: Element, name: string, fallback: T): T => {
-  const value = element.getAttribute(name);
-  if (!value) return fallback;
+  const value = element.getAttribute(name)
+  if (!value) return fallback
   try {
-    return JSON.parse(value) as T;
+    return JSON.parse(value) as T
   } catch {
-    return fallback;
+    return fallback
   }
-};
+}
 
 export function defineNativeNavigationElements(): void {
-  if (typeof customElements === "undefined" || typeof HTMLElement === "undefined") return;
+  if (typeof customElements === "undefined" || typeof HTMLElement === "undefined") return
 
   /*
    * Attribute changes arrive one callback per attribute. Setting several
@@ -48,33 +47,33 @@ export function defineNativeNavigationElements(): void {
    * attribute burst, in order.
    */
   abstract class NativeNavigationElement extends HTMLElement {
-    private syncQueued = false;
-    private syncTail: Promise<void> = Promise.resolve();
+    private syncQueued = false
+    private syncTail: Promise<void> = Promise.resolve()
 
-    protected abstract applyState(): Promise<unknown>;
+    protected abstract applyState(): Promise<unknown>
 
     connectedCallback(): void {
-      this.requestSync();
+      this.requestSync()
     }
 
     attributeChangedCallback(): void {
-      if (this.isConnected) this.requestSync();
+      if (this.isConnected) this.requestSync()
     }
 
     private requestSync(): void {
-      if (this.syncQueued) return;
-      this.syncQueued = true;
-      this.syncTail = this.syncAfter(this.syncTail);
+      if (this.syncQueued) return
+      this.syncQueued = true
+      this.syncTail = this.syncAfter(this.syncTail)
     }
 
     private async syncAfter(previous: Promise<void>): Promise<void> {
-      await previous;
+      await previous
       // Attributes are read only after yielding, so every write made in the
       // same task collapses into this one update.
-      this.syncQueued = false;
-      if (!this.isConnected) return;
+      this.syncQueued = false
+      if (!this.isConnected) return
       try {
-        await this.applyState();
+        await this.applyState()
       } catch {
         // A rejected native call must not poison the queue or surface as an
         // unhandled rejection; the next attribute change retries.
@@ -91,11 +90,11 @@ export function defineNativeNavigationElements(): void {
         "animation-duration",
         "colors",
         "glass",
-      ];
+      ]
     }
 
     protected override applyState(): Promise<unknown> {
-      const animationDuration = nonNegativeFiniteNumberAttribute(this, "animation-duration");
+      const animationDuration = nonNegativeFiniteNumberAttribute(this, "animation-duration")
       const options: NativeNavigationConfigureOptions = {
         enabled: parseBoolean(this.getAttribute("enabled"), true),
         platformStyle:
@@ -118,9 +117,9 @@ export function defineNativeNavigationElements(): void {
           "glass",
           undefined as NativeNavigationConfigureOptions["glass"],
         ),
-      };
-      if (animationDuration !== undefined) options.animationDuration = animationDuration;
-      return NativeNavigation.configure(options);
+      }
+      if (animationDuration !== undefined) options.animationDuration = animationDuration
+      return NativeNavigation.configure(options)
     }
   }
 
@@ -140,7 +139,7 @@ export function defineNativeNavigationElements(): void {
         "colors",
         "glass",
         "animated",
-      ];
+      ]
     }
 
     protected override applyState(): Promise<unknown> {
@@ -171,8 +170,8 @@ export function defineNativeNavigationElements(): void {
           undefined as NativeNavigationNavbarOptions["glass"],
         ),
         animated: parseBoolean(this.getAttribute("animated")),
-      };
-      return NativeNavigation.setNavbar(options);
+      }
+      return NativeNavigation.setNavbar(options)
     }
   }
 
@@ -197,7 +196,7 @@ export function defineNativeNavigationElements(): void {
         "badge-text-color",
         "experimental-baked-tint-colors",
         "animated",
-      ];
+      ]
     }
 
     protected override applyState(): Promise<unknown> {
@@ -241,15 +240,15 @@ export function defineNativeNavigationElements(): void {
         ),
         badgeTextColor: normalizeAttribute(this.getAttribute("badge-text-color")),
         animated: parseBoolean(this.getAttribute("animated")),
-      };
-      return NativeNavigation.setTabbar(options);
+      }
+      return NativeNavigation.setTabbar(options)
     }
   }
 
   if (!customElements.get("cap-native-navigation-provider"))
-    customElements.define("cap-native-navigation-provider", CapNativeNavigationProvider);
+    customElements.define("cap-native-navigation-provider", CapNativeNavigationProvider)
   if (!customElements.get("cap-native-navbar"))
-    customElements.define("cap-native-navbar", CapNativeNavbar);
+    customElements.define("cap-native-navbar", CapNativeNavbar)
   if (!customElements.get("cap-native-tabbar"))
-    customElements.define("cap-native-tabbar", CapNativeTabbar);
+    customElements.define("cap-native-tabbar", CapNativeTabbar)
 }

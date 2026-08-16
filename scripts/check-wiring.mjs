@@ -22,29 +22,27 @@
  *     match the declared Capacitor 7 policy.
  */
 
-import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs"
+import { dirname, join, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const read = (relativePath) => readFileSync(join(root, relativePath), "utf8");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
+const read = (relativePath) => readFileSync(join(root, relativePath), "utf8")
 
-const failures = [];
+const failures = []
 const check = (label, actual, expected) => {
   if (actual !== expected) {
-    failures.push(
-      `${label}: expected ${JSON.stringify(expected)}, found ${JSON.stringify(actual)}`,
-    );
+    failures.push(`${label}: expected ${JSON.stringify(expected)}, found ${JSON.stringify(actual)}`)
   }
-};
+}
 const match = (source, pattern, label) => {
-  const found = source.match(pattern);
+  const found = source.match(pattern)
   if (!found) {
-    failures.push(`${label}: pattern ${pattern} not found`);
-    return undefined;
+    failures.push(`${label}: pattern ${pattern} not found`)
+    return undefined
   }
-  return found[1];
-};
+  return found[1]
+}
 
 /** Mirrors `fixName` in the Capacitor CLI (identical in v7 and v8). */
 const fixName = (name) => {
@@ -52,72 +50,72 @@ const fixName = (name) => {
     .replace(/\//g, "_")
     .replace(/-/g, "_")
     .replace(/@/g, "")
-    .replace(/_\w/g, (segment) => segment[1].toUpperCase());
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-};
+    .replace(/_\w/g, (segment) => segment[1].toUpperCase())
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+}
 
-const pkg = JSON.parse(read("package.json"));
-const iosName = fixName(pkg.name);
-const repositoryBase = "https://github.com/gaomingzhao666/capacitor-native-navigation-bar";
+const pkg = JSON.parse(read("package.json"))
+const iosName = fixName(pkg.name)
+const repositoryBase = "https://github.com/gaomingzhao666/capacitor-native-navigation-bar"
 
 if (!/^7\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkg.version)) {
   failures.push(
     `package.json version must stay on the Capacitor 7 release line, found ${pkg.version}`,
-  );
+  )
 }
-check("public npm access", pkg.publishConfig?.access, "public");
-check("prepublish verification", pkg.scripts?.prepublishOnly, "pnpm run verify:web");
-check("npm homepage", pkg.homepage, `${repositoryBase}#readme`);
-check("npm bugs URL", pkg.bugs?.url, `${repositoryBase}/issues`);
-check("npm repository URL", pkg.repository?.url, `git+${repositoryBase}.git`);
+check("public npm access", pkg.publishConfig?.access, "public")
+check("prepublish verification", pkg.scripts?.prepublishOnly, "pnpm run verify:web")
+check("npm homepage", pkg.homepage, `${repositoryBase}#readme`)
+check("npm bugs URL", pkg.bugs?.url, `${repositoryBase}/issues`)
+check("npm repository URL", pkg.repository?.url, `git+${repositoryBase}.git`)
 
 // 1. Bridge name agreement.
 const jsBridgeName = match(
   read("src/registry.ts"),
   /registerPlugin<[^>]*>\(\s*"([^"]+)"/,
   "src/registry.ts",
-);
+)
 const swiftJsName = match(
   read("ios/Sources/NativeNavigationBarPlugin/NativeNavigationPlugin.swift"),
   /public let jsName = "([^"]+)"/,
   "iOS jsName",
-);
+)
 const androidPlugin = read(
   "android/src/main/java/app/nativenavigationbar/capacitor/NativeNavigationPlugin.java",
-);
+)
 const javaName = match(
   androidPlugin,
   /@CapacitorPlugin\(name = "([^"]+)"\)/,
   "Android @CapacitorPlugin",
-);
-check("iOS jsName vs registerPlugin", swiftJsName, jsBridgeName);
-check("Android plugin name vs registerPlugin", javaName, jsBridgeName);
+)
+check("iOS jsName vs registerPlugin", swiftJsName, jsBridgeName)
+check("Android plugin name vs registerPlugin", javaName, jsBridgeName)
 
 // URLDecoder.decode(String, Charset) was added in API 33. This project targets
 // Android 11/API 30 without core-library desugaring, so only the charset-name
 // overload is safe across the supported range.
 if (/URLDecoder\.decode\([^,]+,\s*StandardCharsets\.[A-Z0-9_]+\s*\)/.test(androidPlugin)) {
-  failures.push("Android URLDecoder must use the API 1 charset-name overload");
+  failures.push("Android URLDecoder must use the API 1 charset-name overload")
 }
 
 // 2 + 3. iOS packaging identifiers.
-const podspec = read(`${iosName}.podspec`);
-check("podspec s.name", match(podspec, /s\.name = '([^']+)'/, "podspec s.name"), iosName);
-const packageSwift = read("Package.swift");
+const podspec = read(`${iosName}.podspec`)
+check("podspec s.name", match(podspec, /s\.name = '([^']+)'/, "podspec s.name"), iosName)
+const packageSwift = read("Package.swift")
 check(
   "Package(name:)",
   match(packageSwift, /let package = Package\(\s*name: "([^"]+)"/, "Package name"),
   iosName,
-);
+)
 check(
   "library product name",
   match(packageSwift, /\.library\(\s*name: "([^"]+)"/, "library name"),
   iosName,
-);
+)
 
 // 4. Capacitor manifest + published files.
-check("capacitor.ios.src", pkg.capacitor?.ios?.src, "ios");
-check("capacitor.android.src", pkg.capacitor?.android?.src, "android");
+check("capacitor.ios.src", pkg.capacitor?.ios?.src, "ios")
+check("capacitor.android.src", pkg.capacitor?.android?.src, "android")
 for (const required of [
   "android/build.gradle",
   "android/src/main/",
@@ -127,7 +125,7 @@ for (const required of [
   `${iosName}.podspec`,
 ]) {
   if (!pkg.files?.includes(required)) {
-    failures.push(`package.json files is missing ${JSON.stringify(required)}`);
+    failures.push(`package.json files is missing ${JSON.stringify(required)}`)
   }
 }
 
@@ -139,12 +137,12 @@ check(
   "podspec deployment target",
   match(podspec, /s\.ios\.deployment_target = '([^']+)'/, "podspec target"),
   "15.0",
-);
+)
 check(
   "Package.swift platform",
   match(packageSwift, /platforms: \[\.iOS\(\.v(\d+)\)\]/, "spm platform"),
   "15",
-);
+)
 // Deliberately a fixed literal, not `rootProject.ext.minSdkVersion`-conditional
 // like every other version in this file: that pattern lets an embedding app's
 // lower value silently win with no build error (verified empirically), which
@@ -154,31 +152,31 @@ check(
   "android minSdk (hard floor, not inherited from the host app)",
   match(read("android/build.gradle"), /^\s*minSdkVersion (\d+)$/m, "android minSdk"),
   "30",
-);
-const androidBuild = read("android/build.gradle");
+)
+const androidBuild = read("android/build.gradle")
 check(
   "android compileSdk standalone fallback",
   match(androidBuild, /^\s*compileSdk\s*=.*:\s*(\d+)$/m, "android compileSdk"),
   "36",
-);
+)
 if (
   !androidBuild.includes(
     "project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion",
   )
 ) {
-  failures.push("android compileSdk must inherit the host value when supplied");
+  failures.push("android compileSdk must inherit the host value when supplied")
 }
 check(
   "android targetSdk standalone fallback",
   match(androidBuild, /^\s*targetSdkVersion\s+.*:\s*(\d+)$/m, "android targetSdk"),
   "36",
-);
+)
 if (
   !androidBuild.includes(
     "project.hasProperty('targetSdkVersion') ? rootProject.ext.targetSdkVersion",
   )
 ) {
-  failures.push("android targetSdk must inherit the host value when supplied");
+  failures.push("android targetSdk must inherit the host value when supplied")
 }
 check(
   "android Java source compatibility",
@@ -188,7 +186,7 @@ check(
     "android Java source",
   ),
   "21",
-);
+)
 check(
   "android Java target compatibility",
   match(
@@ -197,12 +195,12 @@ check(
     "android Java target",
   ),
   "21",
-);
+)
 check(
   "standalone Android Gradle Plugin",
   match(androidBuild, /standaloneAgpVersion\s*=.*:\s*'([^']+)'/, "standalone AGP"),
   "8.13.2",
-);
+)
 check(
   "Android Gradle Plugin classpath fallback",
   match(
@@ -211,7 +209,7 @@ check(
     "AGP classpath fallback",
   ),
   "8.13.2",
-);
+)
 for (const [label, property, expected] of [
   ["AndroidX AppCompat", "androidxAppCompatVersion", "1.7.1"],
   ["AndroidX Core", "androidxCoreVersion", "1.18.0"],
@@ -226,7 +224,7 @@ for (const [label, property, expected] of [
       `${label} fallback`,
     ),
     expected,
-  );
+  )
 }
 check(
   "Gradle wrapper",
@@ -236,34 +234,34 @@ check(
     "Gradle wrapper",
   ),
   "8.14.3",
-);
-const tsconfig = JSON.parse(read("tsconfig.json").replace(/\/\*[\s\S]*?\*\//g, ""));
-check("TypeScript runtime target", tsconfig.compilerOptions?.target, "ES2020");
+)
+const tsconfig = JSON.parse(read("tsconfig.json").replace(/\/\*[\s\S]*?\*\//g, ""))
+check("TypeScript runtime target", tsconfig.compilerOptions?.target, "ES2020")
 if (!tsconfig.compilerOptions?.lib?.includes("ES2020")) {
-  failures.push('TypeScript runtime libs must include "ES2020"');
+  failures.push('TypeScript runtime libs must include "ES2020"')
 }
 check(
   "tsdown runtime target",
   match(read("tsdown.config.mjs"), /^\s*target:\s*"([^"]+)"/m, "tsdown target"),
   "es2020",
-);
+)
 const swiftPmLowerBound = match(
   packageSwift,
   /capacitor-swift-pm\.git",\s*from:\s*"([^"]+)"/,
   "capacitor-swift-pm lower bound",
-);
-check("capacitor-swift-pm lower bound", swiftPmLowerBound, "7.0.0");
-check("peerDependencies is Capacitor-7-only", pkg.peerDependencies?.["@capacitor/core"], "^7.0.0");
+)
+check("capacitor-swift-pm lower bound", swiftPmLowerBound, "7.0.0")
+check("peerDependencies is Capacitor-7-only", pkg.peerDependencies?.["@capacitor/core"], "^7.0.0")
 
 if (failures.length > 0) {
-  console.error("Capacitor plugin wiring check failed:");
+  console.error("Capacitor plugin wiring check failed:")
   for (const failure of failures) {
-    console.error(`  - ${failure}`);
+    console.error(`  - ${failure}`)
   }
-  process.exit(1);
+  process.exit(1)
 }
 
 console.log(
   `Capacitor plugin wiring OK (version ${pkg.version}, bridge "${jsBridgeName}", ` +
     `iOS package "${iosName}").`,
-);
+)

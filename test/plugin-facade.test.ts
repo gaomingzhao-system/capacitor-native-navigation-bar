@@ -1,11 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest"
 
 import type {
   NativeNavigationPlugin,
   NativeNavigationTabSelectEvent,
   NativeNavigationTabbarOptions,
-} from "../src/definitions";
-import { createNativeNavigationFacade } from "../src/plugin-facade";
+} from "../src/definitions"
+import { createNativeNavigationFacade } from "../src/plugin-facade"
 
 const emptyInsets = {
   insets: {
@@ -16,13 +16,13 @@ const emptyInsets = {
     navbarHeight: 0,
     tabbarHeight: 0,
   },
-};
+}
 
 const makeBridge = () => {
-  let tabSelectListener: ((event: NativeNavigationTabSelectEvent) => void) | undefined;
-  const configure = vi.fn(async () => emptyInsets);
-  const setNavbar = vi.fn(async () => emptyInsets);
-  const setTabbar = vi.fn(async () => emptyInsets);
+  let tabSelectListener: ((event: NativeNavigationTabSelectEvent) => void) | undefined
+  const configure = vi.fn(async () => emptyInsets)
+  const setNavbar = vi.fn(async () => emptyInsets)
+  const setTabbar = vi.fn(async () => emptyInsets)
   const bridge = {
     configure,
     setNavbar,
@@ -32,11 +32,11 @@ const makeBridge = () => {
     getPluginVersion: vi.fn(async () => ({ version: "test" })),
     addListener: vi.fn(
       async (eventName: string, listener: (event: NativeNavigationTabSelectEvent) => void) => {
-        if (eventName === "tabSelect") tabSelectListener = listener;
-        return { remove: async () => undefined };
+        if (eventName === "tabSelect") tabSelectListener = listener
+        return { remove: async () => undefined }
       },
     ),
-  } as unknown as NativeNavigationPlugin;
+  } as unknown as NativeNavigationPlugin
 
   return {
     bridge,
@@ -44,31 +44,31 @@ const makeBridge = () => {
     setNavbar,
     setTabbar,
     emitTabSelect: (event: NativeNavigationTabSelectEvent) => tabSelectListener?.(event),
-  };
-};
+  }
+}
 
 describe("createNativeNavigationFacade", () => {
   it("persists a native tab selection before later partial updates", async () => {
-    const raw = makeBridge();
-    const plugin = createNativeNavigationFacade(raw.bridge);
-    const tabs = [{ id: "home" }, { id: "search" }];
-    await plugin.setTabbar({ tabs, selectedId: "home" });
+    const raw = makeBridge()
+    const plugin = createNativeNavigationFacade(raw.bridge)
+    const tabs = [{ id: "home" }, { id: "search" }]
+    await plugin.setTabbar({ tabs, selectedId: "home" })
 
-    raw.emitTabSelect({ id: "search", index: 1, title: "Search" });
-    await plugin.configure({});
+    raw.emitTabSelect({ id: "search", index: 1, title: "Search" })
+    await plugin.configure({})
 
-    expect(raw.setTabbar).toHaveBeenNthCalledWith(2, { selectedId: "search", tabs });
+    expect(raw.setTabbar).toHaveBeenNthCalledWith(2, { selectedId: "search", tabs })
 
-    await plugin.setTabbar({ colors: { tint: "#ff0000" } });
+    await plugin.setTabbar({ colors: { tint: "#ff0000" } })
     expect(raw.setTabbar).toHaveBeenLastCalledWith({
       colors: { tint: "#ff0000" },
       selectedId: "search",
-    });
-  });
+    })
+  })
 
   it("keeps earlier visible detached-role tabs as normal tabs when the last role wins", async () => {
-    const raw = makeBridge();
-    const plugin = createNativeNavigationFacade(raw.bridge);
+    const raw = makeBridge()
+    const plugin = createNativeNavigationFacade(raw.bridge)
 
     await plugin.setTabbar({
       selectedId: "home",
@@ -78,7 +78,7 @@ describe("createNativeNavigationFacade", () => {
         { id: "prominent", role: "prominent" },
         { id: "search-b", role: "search" },
       ],
-    });
+    })
 
     expect(raw.setTabbar).toHaveBeenCalledWith({
       selectedId: "home",
@@ -88,34 +88,34 @@ describe("createNativeNavigationFacade", () => {
         { id: "prominent", role: "normal" },
         { id: "search-b", role: "search" },
       ],
-    });
-  });
+    })
+  })
 
   it("ignores a hidden trailing role when choosing the detached visible tab", async () => {
-    const raw = makeBridge();
-    const plugin = createNativeNavigationFacade(raw.bridge);
+    const raw = makeBridge()
+    const plugin = createNativeNavigationFacade(raw.bridge)
     const tabs = [
       { id: "home" },
       { id: "search-visible", role: "search" as const },
       { id: "search-hidden", role: "search" as const, hidden: true },
-    ];
+    ]
 
-    await plugin.setTabbar({ selectedId: "home", tabs });
+    await plugin.setTabbar({ selectedId: "home", tabs })
 
-    expect(raw.setTabbar).toHaveBeenCalledWith({ selectedId: "home", tabs });
-  });
+    expect(raw.setTabbar).toHaveBeenCalledWith({ selectedId: "home", tabs })
+  })
 
   it("re-evaluates detached roles when a hidden role becomes selected", async () => {
-    const raw = makeBridge();
-    const plugin = createNativeNavigationFacade(raw.bridge);
+    const raw = makeBridge()
+    const plugin = createNativeNavigationFacade(raw.bridge)
     const tabs = [
       { id: "home" },
       { id: "search-visible", role: "search" as const },
       { id: "search-hidden", role: "search" as const, hidden: true },
-    ];
-    await plugin.setTabbar({ selectedId: "home", tabs });
+    ]
+    await plugin.setTabbar({ selectedId: "home", tabs })
 
-    await plugin.setTabbar({ selectedId: "search-hidden" });
+    await plugin.setTabbar({ selectedId: "search-hidden" })
 
     expect(raw.setTabbar).toHaveBeenLastCalledWith({
       selectedId: "search-hidden",
@@ -124,26 +124,26 @@ describe("createNativeNavigationFacade", () => {
         { id: "search-visible", role: "normal" },
         { id: "search-hidden", role: "search", hidden: true },
       ],
-    });
-  });
+    })
+  })
 
   it("preserves role declarations for curve bars and restores floating normalization", async () => {
-    const raw = makeBridge();
-    const plugin = createNativeNavigationFacade(raw.bridge);
+    const raw = makeBridge()
+    const plugin = createNativeNavigationFacade(raw.bridge)
     const tabs = [
       { id: "home" },
       { id: "search-a", role: "search" as const },
       { id: "search-b", role: "search" as const },
-    ];
+    ]
 
-    await plugin.setTabbar({ selectedId: "home", style: { shape: "curve" }, tabs });
+    await plugin.setTabbar({ selectedId: "home", style: { shape: "curve" }, tabs })
     expect(raw.setTabbar).toHaveBeenLastCalledWith({
       selectedId: "home",
       style: { shape: "curve" },
       tabs,
-    });
+    })
 
-    await plugin.setTabbar({ style: { shape: "floating" } });
+    await plugin.setTabbar({ style: { shape: "floating" } })
     expect(raw.setTabbar).toHaveBeenLastCalledWith({
       selectedId: "home",
       style: { shape: "floating" },
@@ -152,30 +152,30 @@ describe("createNativeNavigationFacade", () => {
         { id: "search-a", role: "normal" },
         { id: "search-b", role: "search" },
       ],
-    });
-  });
+    })
+  })
 
   it("removes runtime null values before forwarding patch state", async () => {
-    const raw = makeBridge();
-    const plugin = createNativeNavigationFacade(raw.bridge);
+    const raw = makeBridge()
+    const plugin = createNativeNavigationFacade(raw.bridge)
     const options = {
       tabs: [{ id: "home", badge: null }],
       colors: { tint: null, background: "#ffffff" },
       style: null,
-    } as unknown as NativeNavigationTabbarOptions;
+    } as unknown as NativeNavigationTabbarOptions
 
-    await plugin.setTabbar(options);
+    await plugin.setTabbar(options)
 
     expect(raw.setTabbar).toHaveBeenLastCalledWith({
       tabs: [{ id: "home" }],
       colors: { background: "#ffffff" },
-    });
-  });
+    })
+  })
 
   it("rejects oversized encoded SVG payloads before crossing the native bridge", async () => {
-    const raw = makeBridge();
-    const plugin = createNativeNavigationFacade(raw.bridge);
-    const oversizedPayload = "A".repeat(350_000);
+    const raw = makeBridge()
+    const plugin = createNativeNavigationFacade(raw.bridge)
+    const oversizedPayload = "A".repeat(350_000)
 
     await expect(
       plugin.setNavbar({
@@ -186,7 +186,7 @@ describe("createNativeNavigationFacade", () => {
           },
         ],
       }),
-    ).rejects.toThrow("encoded SVG limit");
-    expect(raw.setNavbar).not.toHaveBeenCalled();
-  });
-});
+    ).rejects.toThrow("encoded SVG limit")
+    expect(raw.setNavbar).not.toHaveBeenCalled()
+  })
+})
