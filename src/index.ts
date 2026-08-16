@@ -14,7 +14,8 @@ export { NativeNavigation };
 export * from "./definitions";
 export { defineNativeNavigationElements } from "./components";
 
-type NativeNavigationRectTarget = Element | DOMRect | NativeNavigationRect;
+/** A DOM element, DOMRect, or NativeNavigationRect convertible into viewport coordinates for zoom transitions. */
+export type NativeNavigationRectTarget = Element | DOMRect | NativeNavigationRect;
 
 const isElement = (target: NativeNavigationRectTarget): target is Element =>
   typeof Element !== "undefined" && target instanceof Element;
