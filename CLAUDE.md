@@ -27,7 +27,7 @@ transitions while JavaScript swaps routes.
 ```
 src/                  TypeScript source (the npm package)
   definitions.ts      All exported types and the NativeNavigationPlugin interface
-  index.ts            Public entry point + zoom-transition helpers
+  index.ts            Public entry point + zoom helpers (getNativeNavigationRect, beginZoomTransition, finishZoomTransition)
   registry.ts         registerPlugin() — imported by both index.ts and components.ts
   plugin.ts           Lazy factory for the web fallback (dynamic import)
   web.ts              Web/browser fallback implementation (NativeNavigationWeb)
@@ -36,7 +36,7 @@ src/                  TypeScript source (the npm package)
 android/              Android (Java) native implementation
 ios/Sources/          Swift native implementation
 
-test/                 Vitest tests for the TypeScript layer (31 tests)
+test/                 Vitest tests for the TypeScript layer (55 tests across 4 files)
 scripts/
   check-wiring.mjs    Validates naming consistency and platform floors across JS/Swift/Java/manifests
 .github/workflows/
@@ -73,7 +73,7 @@ pnpm install              # install deps
 pnpm run build            # clean + tsdown → dist/ (ESM only)
 pnpm run lint             # oxfmt check + oxlint + typecheck + wiring check
 pnpm run fmt              # auto-fix formatting and lint
-pnpm run test             # vitest (31 JS tests)
+pnpm run test             # vitest (55 JS tests across 4 files)
 pnpm run typecheck        # tsc (TypeScript 7) against the single tsconfig.json
 pnpm run check:wiring     # validates JS/iOS/Android naming agreement + platform floors
 pnpm run check:package    # publint --strict + attw --pack . --profile esm-only
@@ -93,7 +93,7 @@ are fine. Run `pnpm run fmt` to auto-fix formatting and linting.
 
 | Tool       | Role                                                      | Config file         |
 | ---------- | --------------------------------------------------------- | ------------------- |
-| tsdown     | Bundler (wraps rolldown), ESM-only output                 | `tsdown.config.ts`  |
+| tsdown     | Bundler (wraps rolldown), ESM-only output                 | `tsdown.config.mjs` |
 | TypeScript | Type checking only (`noEmit: true`), v7 (native compiler) | `tsconfig.json`     |
 | oxfmt      | Formatter (Prettier-compatible)                           | `.oxfmtrc.json`     |
 | oxlint     | Linter                                                    | `.oxlintrc.json`    |
@@ -116,14 +116,14 @@ checking it has TypeScript-7 support (many don't yet).
 
 ## ESM-only packaging — do not add back a second format
 
-`tsdown.config.ts` emits exactly one artifact: `dist/index.js` (ESM) +
+`tsdown.config.mjs` emits exactly one artifact: `dist/index.js` (ESM) +
 `dist/index.d.ts`. There is no CommonJS build, no `.d.cts`, and no IIFE/UMD
 bundle. `package.json` has no `require` export condition and no `unpkg` field.
 
 Do not:
 
 - add a `"require"` condition back to `exports`
-- add an IIFE/UMD format back to `tsdown.config.ts`
+- add an IIFE/UMD format back to `tsdown.config.mjs`
 - add an `"unpkg"` or `"browser"` field to `package.json`
 - add `"type": "commonjs"` (this package is `"type": "module"`)
 
