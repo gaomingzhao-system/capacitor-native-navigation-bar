@@ -1,0 +1,154 @@
+name: Final S1/S2 native gate
+
+on:
+  push:
+    branches:
+      - agent/fix-s1-s2-navigation-risks
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: agent-s1-s2-final-gate
+  cancel-in-progress: false
+
+jobs:
+  web:
+    if: contains(github.event.head_commit.message, 'fix: resolve S1 and S2 navigation risks')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run verify:web
+      - name: Assert one-shot files were removed
+        run: |
+          test ! -e scripts/.agent-phase1-s1-s2.py
+          test ! -e scripts/.agent-phase2-s1-s2.py
+          test ! -e scripts/.agent-reconcile-s1-s2.py
+          test ! -e .github/workflows/agent-phase1.yml
+          test ! -e .github/workflows/agent-phase2.yml
+          test ! -e .github/workflows/agent-reconcile.yml
+
+  ios:
+    if: contains(github.event.head_commit.message, 'fix: resolve S1 and S2 navigation risks')
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate CocoaPods integration
+        run: pod lib lint CapacitorNativeNavigationBar.podspec --allow-warnings --skip-import-validation
+      - name: Build Swift package
+        run: xcodebuild -scheme CapacitorNativeNavigationBar -destination 'generic/platform=iOS' build
+      - name: Select simulator
+        id: simulator
+        run: |
+          udid=$(xcrun simctl list devices available --json \
+            | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; keys=sorted((k for k in d if 'iOS' in k), reverse=True); print(next(x['udid'] for k in keys for x in d[k] if x['name'].startswith('iPhone')))")
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Run Swift tests
+        run: xcodebuild test -scheme CapacitorNativeNavigationBar -destination 'id=${{ steps.simulator.outputs.udid }}'
+
+  android:
+    if: contains(github.event.head_commit.message, 'fix: resolve S1 and S2 navigation risks')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build native library and JVM tests
+        working-directory: android
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          ./gradlew clean build test --no-daemon
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          disable-animations: true
+          script: |
+            cd android
+            ./gradlew connectedDebugAndroidTest --no-daemon
+
+  open-pr:
+    if: contains(github.event.head_commit.message, 'fix: resolve S1 and S2 navigation risks')
+    needs: [web, ios, android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: agent/fix-s1-s2-navigation-risks
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/fix-s1-s2-navigation-risks
+          fetch-depth: 0
+      - name: Remove temporary final gate from the deliverable
+        run: |
+          rm -f .github/workflows/agent-final-gate.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: remove temporary validation gate'
+          git push origin HEAD:$BRANCH
+      - name: Create pull request
+        run: |
+          cat > /tmp/pr-body.md <<'EOF'
+          ## 概要
+
+          `capacitor-native-navigation-bar` の再監査で確認した S1 / S2 リスクを解消します。
+
+          ## 主な修正
+
+          - tabbar patchを直列化・トランザクション化し、失敗時の状態汚染とlistener登録失敗の固定化を防止
+          - Custom Elementsの属性削除、JSONエラー、native rejectionを明示的に処理
+          - Web / iOS / Androidで数値・enum・transition入力検証を統一
+          - iOS system tab経路のWebView・overlay・制約・子ViewControllerを復元／破棄
+          - iOS zoom snapshotを直接crop描画し、bitmap pixel上限を適用
+          - iOS SVGの原色保持と楕円arc commandを実装
+          - Android navbarのleftItemsを実際のstart slotへ配置し、back buttonとの共存を可能化
+          - Android transparent / animatedオプションを反映
+          - Android edge-to-edgeをopt-in管理へ変更し、Activity全体への無条件副作用を除去
+          - Android UI処理をMain Looperへ固定
+          - Android Liquid GlassのWebView snapshotをnavbar/tabbar間で共有
+          - UITabBar内部subviewへの直接操作を廃止
+          - CocoaPods lint、Swift tests、Android API 30 instrumentationをCIへ追加
+
+          ## 検証
+
+          - `pnpm run verify:web`
+          - Swift Package build
+          - Swift unit tests
+          - `pod lib lint`
+          - Android Gradle build / JVM tests
+          - Android API 30 instrumentation tests
+
+          PR作成前の専用ゲートで上記をすべて通過しています。
+          EOF
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --base main --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --repo "$GITHUB_REPOSITORY" --title 'fix: resolve S1 and S2 native navigation risks' --body-file /tmp/pr-body.md
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
+              --title 'fix: resolve S1 and S2 native navigation risks' --body-file /tmp/pr-body.md
+          fi
