@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in ts ios android ci; do
+          for name in ts ios android ci hotfix; do
             cat ".github/agent/${name}.gz.b64."* | base64 -d | gzip -dc > "/tmp/agent_fix_${name}.py"
             python3 -m py_compile "/tmp/agent_fix_${name}.py"
           done
@@ -39,6 +39,7 @@ jobs:
           python3 /tmp/agent_fix_ios.py
           python3 /tmp/agent_fix_android.py
           python3 /tmp/agent_fix_ci.py
+          python3 /tmp/agent_fix_hotfix.py
       - uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -63,7 +64,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in ts ios android ci; do
+          for name in ts ios android ci hotfix; do
             cat ".github/agent/${name}.gz.b64."* | base64 -d | gzip -dc > "/tmp/agent_fix_${name}.py"
           done
           git fetch origin main
@@ -72,6 +73,7 @@ jobs:
           python3 /tmp/agent_fix_ios.py
           python3 /tmp/agent_fix_android.py
           python3 /tmp/agent_fix_ci.py
+          python3 /tmp/agent_fix_hotfix.py
       - uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -107,7 +109,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in ts ios android ci; do
+          for name in ts ios android ci hotfix; do
             cat ".github/agent/${name}.gz.b64."* | base64 -d | gzip -dc > "/tmp/agent_fix_${name}.py"
           done
           git fetch origin main
@@ -116,6 +118,7 @@ jobs:
           python3 /tmp/agent_fix_ios.py
           python3 /tmp/agent_fix_android.py
           python3 /tmp/agent_fix_ci.py
+          python3 /tmp/agent_fix_hotfix.py
       - uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -158,7 +161,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in ts ios android ci; do
+          for name in ts ios android ci hotfix; do
             cat ".github/agent/${name}.gz.b64."* | base64 -d | gzip -dc > "/tmp/agent_fix_${name}.py"
           done
           git fetch origin main
@@ -167,6 +170,7 @@ jobs:
           python3 /tmp/agent_fix_ios.py
           python3 /tmp/agent_fix_android.py
           python3 /tmp/agent_fix_ci.py
+          python3 /tmp/agent_fix_hotfix.py
       - uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -206,7 +210,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in ts ios android ci; do
+          for name in ts ios android ci hotfix; do
             cat ".github/agent/${name}.gz.b64."* | base64 -d | gzip -dc > "/tmp/agent_fix_${name}.py"
           done
           git fetch origin main
@@ -215,6 +219,7 @@ jobs:
           python3 /tmp/agent_fix_ios.py
           python3 /tmp/agent_fix_android.py
           python3 /tmp/agent_fix_ci.py
+          python3 /tmp/agent_fix_hotfix.py
       - uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
