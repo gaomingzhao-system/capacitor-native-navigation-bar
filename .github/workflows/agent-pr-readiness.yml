@@ -1,0 +1,153 @@
+name: S1 S2 PR readiness gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: s1-s2-pr-readiness-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  audit-web-android:
+    if: github.event.pull_request.head.ref == 'agent/fix-s1-s2-navigation-risks'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/fix-s1-s2-navigation-risks
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile
+      - name: Audit the S1 and S2 mitigations
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          required = {
+              'src/plugin-facade.ts': ['enqueueTabbarOperation', 'observerRegistration = undefined', 'validateNativeNavigationTransitionOptions'],
+              'src/components.ts': ['nativeNavigationError', 'capNativeNavigation:error'],
+              'src/validation.ts': ['validateNativeNavigationTabbarOptions', 'validateNativeNavigationTransitionOptions'],
+              'ios/Sources/NativeNavigationBarPlugin/NativeNavigationPlugin.swift': ['teardownNativeChrome', 'nativeNavigationRestoreLiftedViews', 'nativeNavigationSnapshotRendererScale'],
+              'ios/Sources/NativeNavigationBarPlugin/SVGIconRenderer.swift': ['fillColor', 'appendArc', 'ellipseDerivative'],
+              'android/src/main/java/app/nativenavigationbar/capacitor/NativeNavigationPlugin.java': ['addToolbarLeadingItems', 'manageEdgeToEdge', 'new Handler(Looper.getMainLooper()).post'],
+              'android/src/main/java/app/nativenavigationbar/capacitor/GlassBackdropView.java': ['SHARED_SOURCE_FRAMES', 'captureIfNeeded', 'MAX_SHARED_SNAPSHOT_PIXELS'],
+              'android/src/main/java/app/nativenavigationbar/capacitor/NativeNavbarActions.java': ['Gravity.START', 'addLeadingAction'],
+          }
+          for filename, markers in required.items():
+              path = Path(filename)
+              if not path.exists():
+                  raise SystemExit(f'{filename}: missing')
+              text = path.read_text()
+              missing = [marker for marker in markers if marker not in text]
+              if missing:
+                  raise SystemExit(f'{filename}: missing {missing}')
+          PY
+      - run: pnpm run verify:web
+      - name: Android build, lint, and JVM tests
+        working-directory: android
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          ./gradlew clean build test lint --no-daemon
+
+  ios:
+    if: github.event.pull_request.head.ref == 'agent/fix-s1-s2-navigation-risks'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/fix-s1-s2-navigation-risks
+      - name: CocoaPods lint
+        run: pod lib lint CapacitorNativeNavigationBar.podspec --allow-warnings --skip-import-validation
+      - name: Swift Package build
+        run: xcodebuild -scheme CapacitorNativeNavigationBar -destination 'generic/platform=iOS' build
+      - name: Select simulator
+        id: simulator
+        run: |
+          udid=$(xcrun simctl list devices available --json \
+            | python3 -c "import json,sys; data=json.load(sys.stdin)['devices']; runtimes=sorted((key for key in data if 'iOS' in key), reverse=True); print(next(device['udid'] for runtime in runtimes for device in data[runtime] if device['name'].startswith('iPhone')))")
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Swift unit tests
+        run: xcodebuild test -scheme CapacitorNativeNavigationBar -destination "id=${{ steps.simulator.outputs.udid }}"
+
+  android-instrumentation:
+    if: github.event.pull_request.head.ref == 'agent/fix-s1-s2-navigation-risks'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/fix-s1-s2-navigation-risks
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          disable-animations: true
+          script: |
+            cd android
+            echo "sdk.dir=$ANDROID_HOME" > local.properties
+            chmod +x gradlew
+            ./gradlew connectedDebugAndroidTest --no-daemon
+
+  mark-ready:
+    if: github.event.pull_request.head.ref == 'agent/fix-s1-s2-navigation-risks'
+    needs: [audit-web-android, ios, android-instrumentation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: agent/fix-s1-s2-navigation-risks
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/fix-s1-s2-navigation-risks
+          fetch-depth: 0
+      - name: Remove temporary branch-only gates
+        run: |
+          rm -f .github/workflows/agent-finalize.yml
+          rm -f .github/workflows/agent-pr-readiness.yml
+          rm -f scripts/.agent-phase1-s1-s2.py
+          rm -f scripts/.agent-phase2-s1-s2.py
+          rm -f scripts/.agent-reconcile-s1-s2.py
+          rm -f docs/.local-push-probe.md
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: remove temporary validation gates'
+            git pull --rebase origin "$BRANCH"
+            git push origin HEAD:"$BRANCH"
+          fi
+      - name: Mark the validated PR ready
+        run: |
+          gh pr ready "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" || true
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body $'S1 / S2 専用ゲートが成功しました。\n\n- Web package verification\n- Android build / lint / JVM tests\n- CocoaPods lint\n- Swift Package build / Swift unit tests\n- Android API 30 instrumentation\n\n一時検証workflowはブランチから削除済みです。'
