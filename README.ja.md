@@ -83,16 +83,16 @@ import {
   NativeNavigation,
   beginZoomTransition,
   finishZoomTransition,
-} from "capacitor-native-navigation-bar";
+} from "capacitor-native-navigation-bar"
 
-await NativeNavigation.configure({ animationDuration: 300 });
+await NativeNavigation.configure({ animationDuration: 300 })
 
 await NativeNavigation.setNavbar({
   title: "ライブラリ",
   backButton: { visible: true },
   rightItems: [{ id: "search", icon: { ios: { sfSymbol: "magnifyingglass" }, svg: "<svg …/>" } }],
   colors: { tint: "#0a84ff" },
-});
+})
 
 const { insets } = await NativeNavigation.setTabbar({
   selectedId: "home",
@@ -102,11 +102,11 @@ const { insets } = await NativeNavigation.setTabbar({
     { id: "search", title: "検索", role: "search", icon: { svg: "<svg …/>" } },
   ],
   style: { shape: "floating", height: 64, bottomGap: 10 },
-});
+})
 
-NativeNavigation.addListener("tabSelect", ({ id }) => router.go(id));
-NativeNavigation.addListener("navbarBack", () => router.back());
-NativeNavigation.addListener("safeAreaChanged", ({ insets }) => console.log(insets));
+NativeNavigation.addListener("tabSelect", ({ id }) => router.go(id))
+NativeNavigation.addListener("navbarBack", () => router.back())
+NativeNavigation.addListener("safeAreaChanged", ({ insets }) => console.log(insets))
 ```
 
 ### インセット（Insets）
@@ -135,9 +135,9 @@ body {
 ルート変更をラップして、古いページのスナップショット上でネイティブアニメーションを再生します。
 
 ```ts
-await NativeNavigation.beginTransition({ direction: "forward" });
-await router.push("/details");
-await NativeNavigation.finishTransition({ direction: "forward" });
+await NativeNavigation.beginTransition({ direction: "forward" })
+await router.push("/details")
+await NativeNavigation.finishTransition({ direction: "forward" })
 ```
 
 `beginZoomTransition(element)` / `finishZoomTransition(element)` は Apple Zoom スタイルのトランジションに使用します。ビューポート座標内の要素 rect を受け取ります。
