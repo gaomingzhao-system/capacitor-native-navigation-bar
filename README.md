@@ -174,21 +174,57 @@ one native call.
 
 ## API
 
-| Method                       | Returns                       | Notes                                                                                                     |
-| ---------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `configure(options?)`        | `{ insets }`                  | Global enable/disable, inset mode, default animation duration, shared colors and glass.                   |
-| `setNavbar(options)`         | `{ insets }`                  | Title, subtitle, back button, left/right items, colors, blur/glass, large title.                          |
-| `setTabbar(options)`         | `{ insets }`                  | Tabs, selection, labels/icons, badges, colors, `floating`/`curve` shape, detached trailing `search` role. |
-| `beginTransition(options?)`  | `{ id, direction, duration }` | Snapshots the WebView and hides the live view.                                                            |
-| `finishTransition(options?)` | `{ id, direction, duration }` | Animates the snapshot away. Directions: `forward`, `back`, `root`, `tab`, `zoom`, `none`.                 |
-| `getPluginVersion()`         | `{ version }`                 | `native` on iOS/Android, `web` on the web fallback.                                                       |
+### `NativeNavigation` Methods
 
-Events: `navbarBack`, `navbarItemTap`, `tabSelect`, `safeAreaChanged`,
-`transitionStart`, `transitionEnd`. Each is also dispatched on `window` as
-`capNativeNavigation:<event>`.
+| Method                       | Returns                                     | Notes                                                                                                       |
+| ---------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `configure(options?)`        | `Promise<NativeNavigationInsetsResult>`     | Global enable/disable, inset mode, default animation duration, shared colors and glass.                     |
+| `setNavbar(options)`         | `Promise<NativeNavigationInsetsResult>`     | Title, subtitle, back button, left/right items, colors, blur/glass, large title.                            |
+| `setTabbar(options)`         | `Promise<NativeNavigationInsetsResult>`     | Tabs, selection, labels/icons, badges, colors, `floating`/`curve` shape, detached trailing `search` role.   |
+| `beginTransition(options?)`  | `Promise<NativeNavigationTransitionResult>` | Snapshots the WebView and prepares a native transition.                                                     |
+| `finishTransition(options?)` | `Promise<NativeNavigationTransitionResult>` | Animates the snapshot away into current view. Directions: `forward`, `back`, `root`, `tab`, `zoom`, `none`. |
+| `getPluginVersion()`         | `Promise<PluginVersionResult>`              | Returns version identifier: `native` on iOS/Android, `web` on the web fallback.                             |
+| `addListener(event, cb)`     | `Promise<PluginListenerHandle>`             | Subscribes to plugin events.                                                                                |
 
-Full option and event types live in
-[`src/definitions.ts`](./src/definitions.ts) and ship as `dist/index.d.ts`.
+### Zoom Helper Functions
+
+| Function                                  | Returns                                     | Description                                                                                 |
+| ----------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `getNativeNavigationRect(target)`         | `NativeNavigationRect`                      | Converts an `Element`, `DOMRect`, or `NativeNavigationRect` into viewport coordinates.      |
+| `beginZoomTransition(target, options?)`   | `Promise<NativeNavigationTransitionResult>` | Begins an Apple-Zoom-style transition with `target` element/rect as `sourceRect`.           |
+| `finishZoomTransition(target?, options?)` | `Promise<NativeNavigationTransitionResult>` | Finishes an Apple-Zoom-style transition into an optional destination `target` element/rect. |
+
+### Custom Elements
+
+Call `defineNativeNavigationElements()` to register custom elements in the browser custom elements registry:
+
+| Custom Element                     | Maps to                        | Supported Attributes                                                                                                                                                                                                                                                                                             |
+| ---------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<cap-native-navigation-provider>` | `NativeNavigation.configure()` | `enabled`, `platform-style`, `content-inset-mode`, `animation-duration`, `colors`, `glass`                                                                                                                                                                                                                       |
+| `<cap-native-navbar>`              | `NativeNavigation.setNavbar()` | `hidden`, `title`, `subtitle`, `large`, `transparent`, `blur-effect`, `back-button`, `back-title`, `left-items`, `right-items`, `colors`, `glass`, `animated`                                                                                                                                                    |
+| `<cap-native-tabbar>`              | `NativeNavigation.setTabbar()` | `hidden`, `tabs`, `selected-id`, `labels`, `label-visibility-mode`, `icons`, `colors`, `glass`, `style`, `blur-effect`, `disable-transparent-on-scroll-edge`, `disable-indicator`, `indicator-color`, `ripple-color`, `badge-background-color`, `badge-text-color`, `experimental-baked-tint-colors`, `animated` |
+
+### Events
+
+| Event name        | Payload type                           | Description                                             |
+| ----------------- | -------------------------------------- | ------------------------------------------------------- |
+| `navbarBack`      | `NativeNavigationBackEvent`            | Fired when the native navbar back affordance is tapped  |
+| `navbarItemTap`   | `NativeNavigationBarItemTapEvent`      | Fired when a navbar left or right action item is tapped |
+| `tabSelect`       | `NativeNavigationTabSelectEvent`       | Fired when a tab item is selected                       |
+| `safeAreaChanged` | `NativeNavigationSafeAreaChangedEvent` | Fired when native safe area insets change               |
+| `transitionStart` | `NativeNavigationTransitionEvent`      | Fired when a native snapshot transition starts          |
+| `transitionEnd`   | `NativeNavigationTransitionEvent`      | Fired when a native snapshot transition finishes        |
+
+Each event is also dispatched on `window` as `capNativeNavigation:<eventName>`.
+
+### Exported Types
+
+All option, event, and result types are exported from the package root and defined in [`src/definitions.ts`](./src/definitions.ts) (shipped as `dist/index.d.ts`), including:
+
+- Options & Configurations: `NativeNavigationConfigureOptions`, `NativeNavigationNavbarOptions`, `NativeNavigationTabbarOptions`, `NativeNavigationTabbarStyle`, `NativeNavigationTab`, `NativeNavigationBarButton`, `NativeNavigationBackButton`, `NativeNavigationIcon`, `NativeNavigationColors`, `NativeNavigationGlassOptions`, `NativeNavigationGlassEffect`, `NativeNavigationBlurEffect`, `NativeNavigationPlatformStyle`, `NativeNavigationContentInsetMode`, `NativeNavigationTabLabelVisibilityMode`, `NativeNavigationTabRole`, `NativeNavigationTabbarShape`.
+- Transitions & Geometry: `NativeNavigationBeginTransitionOptions`, `NativeNavigationFinishTransitionOptions`, `NativeNavigationTransitionResult`, `NativeNavigationTransitionDirection`, `NativeNavigationRect`, `NativeNavigationRectTarget`, `NativeNavigationInsets`, `NativeNavigationInsetsResult`.
+- Events & Handlers: `NativeNavigationBackEvent`, `NativeNavigationBarItemTapEvent`, `NativeNavigationTabSelectEvent`, `NativeNavigationSafeAreaChangedEvent`, `NativeNavigationTransitionEvent`.
+- Plugin Interface: `NativeNavigationPlugin`, `PluginVersionResult`.
 
 ## Platform behavior
 

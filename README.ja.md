@@ -160,21 +160,57 @@ await NativeNavigation.finishTransition({ direction: "forward" });
 
 ## API
 
-| メソッド                     | 戻り値                        | 説明                                                                                                              |
-| ---------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `configure(options?)`        | `{ insets }`                  | グローバルの有効化/無効化、インセットモード、デフォルトアニメーション時間、共有カラーとガラスエフェクト。         |
-| `setNavbar(options)`         | `{ insets }`                  | タイトル、サブタイトル、戻るボタン、左右アイテム、カラー、blur/glass、大タイトル。                                |
-| `setTabbar(options)`         | `{ insets }`                  | タブ、選択状態、ラベル/アイコン、バッジ、カラー、`floating`/`curve` シェイプ、detached trailing `search` ロール。 |
-| `beginTransition(options?)`  | `{ id, direction, duration }` | WebView をスナップショットし、ライブビューを非表示にします。                                                      |
-| `finishTransition(options?)` | `{ id, direction, duration }` | スナップショットをアニメーションで消します。方向: `forward`、`back`、`root`、`tab`、`zoom`、`none`。              |
-| `getPluginVersion()`         | `{ version }`                 | iOS/Android では `native`、ウェブフォールバックでは `web`。                                                       |
+### `NativeNavigation` メソッド
+
+| メソッド                     | 戻り値                                      | 説明                                                                                                                 |
+| ---------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `configure(options?)`        | `Promise<NativeNavigationInsetsResult>`     | グローバルの有効化/無効化、インセットモード、デフォルトアニメーション時間、共有カラーとガラスエフェクト。            |
+| `setNavbar(options)`         | `Promise<NativeNavigationInsetsResult>`     | タイトル、サブタイトル、戻るボタン、左右アイテム、カラー、blur/glass、大タイトル。                                   |
+| `setTabbar(options)`         | `Promise<NativeNavigationInsetsResult>`     | タブ、選択状態、ラベル/アイコン、バッジ、カラー、`floating`/`curve` シェイプ、detached trailing `search` ロール。    |
+| `beginTransition(options?)`  | `Promise<NativeNavigationTransitionResult>` | WebView をスナップショットし、ネイティブトランジションの準備をします。                                               |
+| `finishTransition(options?)` | `Promise<NativeNavigationTransitionResult>` | スナップショットを現在の画面へアニメーションで切り替えます。方向: `forward`、`back`、`root`、`tab`、`zoom`、`none`。 |
+| `getPluginVersion()`         | `Promise<PluginVersionResult>`              | バージョン識別子を返します: iOS/Android では `native`、ウェブフォールバックでは `web`。                              |
+| `addListener(event, cb)`     | `Promise<PluginListenerHandle>`             | プラグインのイベントを購読します。                                                                                   |
+
+### ズームトランジション用ヘルパー関数
+
+| 関数                                      | 戻り値                                      | 説明                                                                                          |
+| ----------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `getNativeNavigationRect(target)`         | `NativeNavigationRect`                      | `Element`、`DOMRect`、または `NativeNavigationRect` をビューポート座標系へ変換します。        |
+| `beginZoomTransition(target, options?)`   | `Promise<NativeNavigationTransitionResult>` | `target` の要素/rect を `sourceRect` として Apple Zoom スタイルのトランジションを開始します。 |
+| `finishZoomTransition(target?, options?)` | `Promise<NativeNavigationTransitionResult>` | 遷移先ルートの任意の `target` 要素/rect へ Apple Zoom スタイルのトランジションを完了します。  |
+
+### カスタム要素
+
+`defineNativeNavigationElements()` を呼び出すことで、ブラウザの Custom Elements レジストリに要素を登録できます:
+
+| カスタム要素                       | 対応する呼び出し               | サポート属性                                                                                                                                                                                                                                                                                                     |
+| ---------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<cap-native-navigation-provider>` | `NativeNavigation.configure()` | `enabled`, `platform-style`, `content-inset-mode`, `animation-duration`, `colors`, `glass`                                                                                                                                                                                                                       |
+| `<cap-native-navbar>`              | `NativeNavigation.setNavbar()` | `hidden`, `title`, `subtitle`, `large`, `transparent`, `blur-effect`, `back-button`, `back-title`, `left-items`, `right-items`, `colors`, `glass`, `animated`                                                                                                                                                    |
+| `<cap-native-tabbar>`              | `NativeNavigation.setTabbar()` | `hidden`, `tabs`, `selected-id`, `labels`, `label-visibility-mode`, `icons`, `colors`, `glass`, `style`, `blur-effect`, `disable-transparent-on-scroll-edge`, `disable-indicator`, `indicator-color`, `ripple-color`, `badge-background-color`, `badge-text-color`, `experimental-baked-tint-colors`, `animated` |
 
 ### イベント
 
-`navbarBack`、`navbarItemTap`、`tabSelect`、`safeAreaChanged`、`transitionStart`、`transitionEnd`。
-各イベントは `NativeNavigation.addListener(...)` と `window` 上の `capNativeNavigation:<event>` の両方で配信されます。
+| イベント名        | ペイロードの型                         | 説明                                                   |
+| ----------------- | -------------------------------------- | ------------------------------------------------------ |
+| `navbarBack`      | `NativeNavigationBackEvent`            | ネイティブ navbar の戻るボタンがタップされたときに発火 |
+| `navbarItemTap`   | `NativeNavigationBarItemTapEvent`      | navbar の左右アクションボタンがタップされたときに発火  |
+| `tabSelect`       | `NativeNavigationTabSelectEvent`       | タブ項目が選択されたときに発火                         |
+| `safeAreaChanged` | `NativeNavigationSafeAreaChangedEvent` | ネイティブのセーフエリアインセットが変化したときに発火 |
+| `transitionStart` | `NativeNavigationTransitionEvent`      | ネイティブスナップショットトランジション開始時に発火   |
+| `transitionEnd`   | `NativeNavigationTransitionEvent`      | ネイティブスナップショットトランジション完了時に発火   |
 
-すべてのオプション・イベントの型は [`src/definitions.ts`](./src/definitions.ts) に定義されており、`dist/index.d.ts` としてパッケージに含まれています。
+各イベントは `window` 上でも `capNativeNavigation:<eventName>` として配信されます。
+
+### エクスポートされている型
+
+すべてのオプション・イベント・戻り値の型はパッケージのルートからエクスポートされ、[`src/definitions.ts`](./src/definitions.ts) で定義されています（`dist/index.d.ts` として同梱）:
+
+- オプション & 設定: `NativeNavigationConfigureOptions`, `NativeNavigationNavbarOptions`, `NativeNavigationTabbarOptions`, `NativeNavigationTabbarStyle`, `NativeNavigationTab`, `NativeNavigationBarButton`, `NativeNavigationBackButton`, `NativeNavigationIcon`, `NativeNavigationColors`, `NativeNavigationGlassOptions`, `NativeNavigationGlassEffect`, `NativeNavigationBlurEffect`, `NativeNavigationPlatformStyle`, `NativeNavigationContentInsetMode`, `NativeNavigationTabLabelVisibilityMode`, `NativeNavigationTabRole`, `NativeNavigationTabbarShape`。
+- トランジション & ジオメトリ: `NativeNavigationBeginTransitionOptions`, `NativeNavigationFinishTransitionOptions`, `NativeNavigationTransitionResult`, `NativeNavigationTransitionDirection`, `NativeNavigationRect`, `NativeNavigationRectTarget`, `NativeNavigationInsets`, `NativeNavigationInsetsResult`。
+- イベント & ハンドラー: `NativeNavigationBackEvent`, `NativeNavigationBarItemTapEvent`, `NativeNavigationTabSelectEvent`, `NativeNavigationSafeAreaChangedEvent`, `NativeNavigationTransitionEvent`。
+- プラグインインターフェース: `NativeNavigationPlugin`, `PluginVersionResult`。
 
 ## プラットフォームごとの動作
 
