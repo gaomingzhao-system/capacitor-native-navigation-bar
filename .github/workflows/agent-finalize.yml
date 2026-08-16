@@ -1,0 +1,265 @@
+name: Finalize S1 and S2 fixes
+
+on:
+  push:
+    branches:
+      - agent/fix-s1-s2-navigation-risks
+    paths:
+      - .github/workflows/agent-finalize.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: finalize-s1-s2-navigation
+  cancel-in-progress: false
+
+env:
+  BRANCH: agent/fix-s1-s2-navigation-risks
+
+jobs:
+  prepare:
+    name: Source audit, Web, and Android JVM
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/fix-s1-s2-navigation-risks
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: pnpm install --frozen-lockfile
+      - name: Remove temporary implementation artifacts
+        run: |
+          rm -f scripts/.agent-phase1-s1-s2.py
+          rm -f scripts/.agent-phase2-s1-s2.py
+          rm -f scripts/.agent-reconcile-s1-s2.py
+          rm -f docs/.local-push-probe.md
+          rm -f .github/workflows/agent-phase1.yml
+          rm -f .github/workflows/agent-phase2.yml
+          rm -f .github/workflows/agent-reconcile.yml
+          rm -f .github/workflows/agent-reconcile-final.yml
+          rm -f .github/workflows/agent-final-gate.yml
+          rm -f .github/workflows/agent-superfinal.yml
+      - name: Audit all S1 and S2 mitigations
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          required = {
+              'src/plugin-facade.ts': [
+                  'enqueueTabbarOperation',
+                  'observerRegistration = undefined',
+                  'validateNativeNavigationTransitionOptions',
+                  'const result = await bridge.setTabbar(effectiveOptions)',
+              ],
+              'src/components.ts': [
+                  'nativeNavigationError',
+                  'capNativeNavigation:error',
+              ],
+              'src/validation.ts': [
+                  'NATIVE_NAVIGATION_MAX_DURATION_MS',
+                  'validateNativeNavigationTabbarOptions',
+                  'validateNativeNavigationTransitionOptions',
+              ],
+              'ios/Sources/NativeNavigationBarPlugin/NativeNavigationPlugin.swift': [
+                  'teardownNativeChrome',
+                  'nativeNavigationRestoreLiftedViews',
+                  'nativeNavigationSnapshotRendererScale',
+                  "platformStyle 'android' is not available on iOS",
+              ],
+              'ios/Sources/NativeNavigationBarPlugin/SVGIconRenderer.swift': [
+                  'fillColor',
+                  'appendArc',
+                  'ellipseDerivative',
+              ],
+              'android/src/main/java/app/nativenavigationbar/capacitor/NativeNavigationPlugin.java': [
+                  'addToolbarLeadingItems',
+                  'manageEdgeToEdge',
+                  "platformStyle 'ios' is not available on Android",
+                  'new Handler(Looper.getMainLooper()).post',
+                  'setChromeVisibility',
+              ],
+              'android/src/main/java/app/nativenavigationbar/capacitor/GlassBackdropView.java': [
+                  'SHARED_SOURCE_FRAMES',
+                  'captureIfNeeded',
+                  'MAX_SHARED_SNAPSHOT_PIXELS',
+              ],
+              'android/src/main/java/app/nativenavigationbar/capacitor/NativeNavbarActions.java': [
+                  'Gravity.START',
+                  'addLeadingAction',
+              ],
+              '.github/workflows/ci.yml': [
+                  'Validate CocoaPods integration',
+                  'Android API 30 instrumentation',
+                  'connectedDebugAndroidTest',
+              ],
+          }
+
+          for filename, markers in required.items():
+              path = Path(filename)
+              if not path.exists():
+                  raise SystemExit(f'{filename}: required file is missing')
+              text = path.read_text()
+              missing = [marker for marker in markers if marker not in text]
+              if missing:
+                  raise SystemExit(f'{filename}: missing mitigations: {missing}')
+
+          forbidden = [
+              'tabBar.subviews.forEach { subview in',
+              'activity == null) {\n            runnable.run();',
+              'activity.runOnUiThread(this::enableEdgeToEdge)',
+          ]
+          joined = '\n'.join(
+              Path(name).read_text()
+              for name in [
+                  'ios/Sources/NativeNavigationBarPlugin/NativeNavigationPlugin.swift',
+                  'android/src/main/java/app/nativenavigationbar/capacitor/NativeNavigationPlugin.java',
+              ]
+          )
+          for marker in forbidden:
+              if marker in joined:
+                  raise SystemExit(f'forbidden legacy implementation remains: {marker}')
+          PY
+      - name: Format and verify the Web package
+        run: |
+          pnpm run fmt
+          pnpm run verify:web
+      - name: Build Android and run JVM tests
+        working-directory: android
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          ./gradlew clean build test lint --no-daemon
+      - name: Commit formatting and cleanup only after verification
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: finalize verified S1 and S2 changes"
+            git pull --rebase origin "$BRANCH"
+            git push origin HEAD:"$BRANCH"
+          fi
+
+  ios:
+    name: CocoaPods, SPM, and Swift tests
+    needs: prepare
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/fix-s1-s2-navigation-risks
+      - name: Validate CocoaPods specification
+        run: pod lib lint CapacitorNativeNavigationBar.podspec --allow-warnings --skip-import-validation
+      - name: Build Swift package
+        run: xcodebuild -scheme CapacitorNativeNavigationBar -destination "generic/platform=iOS" build
+      - name: Resolve an available simulator
+        id: simulator
+        run: |
+          udid=$(xcrun simctl list devices available --json \
+            | python3 -c "import json,sys; data=json.load(sys.stdin)['devices']; runtimes=sorted((key for key in data if 'iOS' in key), reverse=True); print(next(device['udid'] for runtime in runtimes for device in data[runtime] if device['name'].startswith('iPhone')))")
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Run Swift unit tests
+        run: xcodebuild test -scheme CapacitorNativeNavigationBar -destination "id=${{ steps.simulator.outputs.udid }}"
+
+  android-instrumentation:
+    name: Android API 30 instrumentation
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/fix-s1-s2-navigation-risks
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          disable-animations: true
+          script: |
+            cd android
+            echo "sdk.dir=$ANDROID_HOME" > local.properties
+            chmod +x gradlew
+            ./gradlew connectedDebugAndroidTest --no-daemon
+
+  create-pr:
+    name: Create pull request
+    needs: [prepare, ios, android-instrumentation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/fix-s1-s2-navigation-risks
+          fetch-depth: 0
+      - name: Create or update the pull request
+        run: |
+          cat > /tmp/pr-body.md <<'EOF'
+          ## 概要
+
+          再監査で確認した S1 / S2 リスクを、Web・iOS・Android・CIを含めて解消します。
+
+          ## 主な修正
+
+          - tabbar patchを直列化し、検証とnative成功後だけ状態をcommit
+          - tabSelect listener登録失敗を再試行可能化
+          - Custom Elementsの属性reset、JSON error、native rejectionを明示処理
+          - Web / iOS / Androidのruntime入力検証を統一
+          - iOS system tab経路のWebView、overlay、constraint、child controllerを復元・破棄
+          - iOS zoom snapshotをcrop領域へ直接描画し、pixel上限を適用
+          - iOS SVGの原色保持と楕円arc commandを実装
+          - Android leftItemsをToolbarのstart側へ配置し、back buttonと共存
+          - Android transparent / animatedオプションを反映
+          - Android edge-to-edgeをopt-in管理へ変更
+          - Android UI処理をMain Looperへ固定
+          - Android Liquid Glassのsource snapshotをnavbar / tabbar間で共有
+          - UITabBar内部subviewへの直接操作を廃止
+          - CocoaPods lint、Swift tests、Android API 30 instrumentationをCIへ追加
+
+          ## PR作成前の検証
+
+          - Web format / lint / typecheck / Vitest / ESM build / publint / attw
+          - Android Gradle build / JVM tests / lint（Java 21）
+          - CocoaPods lint
+          - Swift Package build / Swift unit tests
+          - Android API 30 instrumentation tests
+          EOF
+
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --base main --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --repo "$GITHUB_REPOSITORY" \
+              --title "fix: resolve S1 and S2 native navigation risks" \
+              --body-file /tmp/pr-body.md
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
+              --title "fix: resolve S1 and S2 native navigation risks" \
+              --body-file /tmp/pr-body.md
+          fi
