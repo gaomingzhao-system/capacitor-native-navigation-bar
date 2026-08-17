@@ -2467,11 +2467,14 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
     private func currentInsets() -> [String: Any] {
         let safeInsets = bridge?.viewController?.view.safeAreaInsets ?? .zero
         let navHeight = isEnabled && navbarVisible ? navbarHeight + safeInsets.top : 0
-        let nativeTabHeight = max(tabBar?.frame.height ?? 0, 49 + safeInsets.bottom)
         // UITabBarController already owns the bottom safe area on the iOS 26
         // system Liquid Glass path. Do not report that safe-area portion again
         // to the WebView, otherwise the CSS inset creates duplicate bottom space.
-        let systemTabHeight = max(0, nativeTabHeight - safeInsets.bottom)
+        let systemTabHeight = nativeNavigationSystemTabBarInsetHeight(
+            frameHeight: tabBar?.frame.height ?? 0,
+            safeAreaBottom: safeInsets.bottom,
+            excludesSafeArea: isUsingSystemTabBar && usesSystemLiquidGlass
+        )
         let customTabHeight = tabbarHeight + safeInsets.bottom + tabbarStyle.bottomGap
         let tabHeight = isEnabled && tabbarVisible ? (isUsingSystemTabBar ? systemTabHeight : customTabHeight) : 0
         return [
