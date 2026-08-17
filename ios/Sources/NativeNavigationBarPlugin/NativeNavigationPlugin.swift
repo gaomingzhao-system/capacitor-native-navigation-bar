@@ -289,6 +289,13 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
     }
 
     override public func load() {
+        // `UIDevice.orientationDidChangeNotification` is only posted while the
+        // device is generating orientation notifications. UIKit usually turns
+        // that on for us, but it is not contractual, so take an explicit
+        // interest and give it back in `deinit`. begin/end are reference
+        // counted, so this is taken unconditionally: skipping it when someone
+        // else already holds a reference would leave this plugin without one,
+        // and rotation would stop being delivered the moment they release it.
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         generatesOrientationNotifications = true
 
@@ -317,6 +324,10 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             name: UIAccessibility.reduceTransparencyStatusDidChangeNotification,
             object: nil
         )
+        // If the app is backgrounded mid-transition, nothing the user is
+        // watching matters anymore, so force-complete it immediately rather
+        // than leaving the WebView at alpha 0.01 for whenever the process
+        // happens to resume.
         center.addObserver(
             self,
             selector: #selector(handleAppDidEnterBackground),
@@ -626,6 +637,10 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
         }
     }
 
+    /// Schedules `recoverStuckTransition` to force-complete `id` if
+    /// `finishTransition` has not cancelled the watchdog by then. The delay is
+    /// generous (the requested duration plus a multi-second grace period) so
+    /// it never fires during a legitimate, merely slow, transition.
     private func ownsTransition(_ session: NativeNavigationTransitionSession) -> Bool {
         guard let activeSession = activeTransitionSession else {
             return false
@@ -1494,6 +1509,7 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
         }
     }
 
+    // swiftlint:disable:next function_body_length
     private func makeTabBarItems(
         _ tabs: [[String: Any]],
         selectedId: String?,
@@ -1529,6 +1545,9 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             let role = (tab["role"] as? String)?.lowercased()
             let item: UITabBarItem
             if role == "search" || role == "prominent" {
+                // iOS 26+ Liquid Glass renders `.search` as a detached trailing
+                // circular action beside the floating tab capsule. Keep the
+                // system-item title empty so UIKit treats it as icon-only.
                 item = UITabBarItem(tabBarSystemItem: .search, tag: sourceIndex)
                 item.title = nil
                 if let image = image {
@@ -1614,6 +1633,9 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             ))
         }
 
+        // Keep at most one detached trailing action and place it last so the
+        // capsule + circular button layout matches the system Liquid Glass pattern.
+        // Skip reordering for curve bars so center-item selection stays stable.
         if tabbarStyle.shape == .floating,
            let trailingIndex = items.lastIndex(where: { $0.isDetachedTrailing }) {
             let trailing = items.remove(at: trailingIndex)
@@ -2066,6 +2088,7 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
         if prefersOpaqueTabBarBackground() {
             tabBar.backgroundFillColor = opaqueBackground
         } else if usesLiquidGlass {
+            // Keep the hand-drawn fill clear so UIGlassEffect can show through.
             tabBar.backgroundFillColor = .clear
         } else {
             tabBar.backgroundFillColor = backgroundColor
@@ -2196,6 +2219,8 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
                 height: iconSize.height + 3 + ceil(titleSize.height)
             )
             : iconSize
+        // `UIScreen.main` is deprecated and wrong under multi-scene/multi-display;
+        // `preferred()` resolves the scale from the current trait environment.
         let format = UIGraphicsImageRendererFormat.preferred()
 
         let image = UIGraphicsImageRenderer(size: imageSize, format: format).image { _ in
@@ -2425,6 +2450,8 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             return
         }
 
+        // Keep older SDK builds working while adopting the native iOS 26 bar
+        // button Liquid Glass grouping APIs when the runtime exposes them.
         let object = item as NSObject
         if object.responds(to: NSSelectorFromString("setIdentifier:")) {
             object.setValue(id, forKey: "identifier")
