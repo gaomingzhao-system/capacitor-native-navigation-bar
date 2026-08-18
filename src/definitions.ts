@@ -7,7 +7,7 @@ import type { PluginListenerHandle } from "@capacitor/core"
 /** Platform rendering preference for the native bars. */
 export type NativeNavigationPlatformStyle = "auto" | "ios" | "android"
 
-/** How the plugin exposes native bar sizes to web content. */
+/** How the plugin exposes native-navigation content insets to web content. */
 export type NativeNavigationContentInsetMode = "css" | "none"
 
 /** Navigation animation direction. */
@@ -349,8 +349,9 @@ export interface NativeNavigationTabbarStyle {
   maxWidth?: number
 
   /**
-   * Bottom gap above the platform safe area in native points/dp. Defaults to
-   * `10` for `floating` and `0` for `curve`.
+   * Bottom gap above the platform safe area in native points/dp. Used on
+   * custom tab bar paths; on the system `UITabBarController` path UIKit owns
+   * the layout. Defaults to `10` for `floating` and `0` for `curve`.
    */
   bottomGap?: number
 
@@ -455,11 +456,34 @@ export interface NativeNavigationTabbarOptions {
 
 /** Insets exposed to web content. */
 export interface NativeNavigationInsets {
+  /** Top content-avoidance inset reported to the WebView. */
   top: number
+
+  /** Right content-avoidance inset reported to the WebView. */
   right: number
+
+  /**
+   * Bottom content-avoidance inset reported to the WebView.
+   *
+   * On the iOS 26 system Liquid Glass tab-bar path, this excludes the
+   * system-owned bottom safe area. Custom and earlier-iOS paths retain the
+   * safe-area-inclusive calculation.
+   */
   bottom: number
+
+  /** Left content-avoidance inset reported to the WebView. */
   left: number
+
+  /** Reported native navbar contribution to the WebView content inset. */
   navbarHeight: number
+
+  /**
+   * Reported native tab-bar contribution to the WebView content inset.
+   *
+   * This is not guaranteed to equal the full physical UITabBar frame on the
+   * iOS 26 system Liquid Glass path because the system-owned safe area is
+   * excluded.
+   */
   tabbarHeight: number
 }
 
@@ -524,6 +548,11 @@ export interface NativeNavigationTabSelectEvent {
   title?: string
 }
 
+/**
+ * Emitted when the plugin-reported native-navigation content insets change.
+ * These values are content-avoidance insets, not raw operating-system
+ * safe-area measurements.
+ */
 export interface NativeNavigationSafeAreaChangedEvent {
   insets: NativeNavigationInsets
 }
