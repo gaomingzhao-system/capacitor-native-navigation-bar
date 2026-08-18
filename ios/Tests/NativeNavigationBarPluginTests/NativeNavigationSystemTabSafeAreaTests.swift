@@ -59,6 +59,38 @@ final class NativeNavigationSystemTabSafeAreaTests: XCTestCase {
         )
     }
 
+    func testSystemTabContentFrameExtendsOnlyItsBottomEdge() {
+        let currentFrame = CGRect(x: 0, y: 0, width: 390, height: 761)
+        let systemBounds = CGRect(x: 0, y: 0, width: 390, height: 844)
+
+        XCTAssertEqual(
+            nativeNavigationSystemTabExtendedContentFrame(
+                currentFrame: currentFrame,
+                systemTabBounds: systemBounds
+            ),
+            CGRect(x: 0, y: 0, width: 390, height: 844)
+        )
+    }
+
+    func testSystemTabContentFrameNeverShrinksOrUsesInvalidGeometry() {
+        let currentFrame = CGRect(x: 0, y: 0, width: 390, height: 844)
+
+        XCTAssertEqual(
+            nativeNavigationSystemTabExtendedContentFrame(
+                currentFrame: currentFrame,
+                systemTabBounds: CGRect(x: 0, y: 0, width: 390, height: 761)
+            ),
+            currentFrame
+        )
+        XCTAssertEqual(
+            nativeNavigationSystemTabExtendedContentFrame(
+                currentFrame: currentFrame,
+                systemTabBounds: CGRect(x: 0, y: 0, width: 390, height: .nan)
+            ),
+            currentFrame
+        )
+    }
+
     @MainActor
     func testWKWebViewHostingInstallsSystemTabSafeAreaCompensation() throws {
         guard #available(iOS 26.0, *) else {
@@ -69,17 +101,24 @@ final class NativeNavigationSystemTabSafeAreaTests: XCTestCase {
         let contentController = NativeNavigationTabContentController()
         contentController.tabBarItem = UITabBarItem(title: "Home", image: nil, tag: 0)
         tabController.setViewControllers([contentController], animated: false)
+        tabController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        tabController.view.setNeedsLayout()
+        tabController.view.layoutIfNeeded()
 
-        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 761))
         XCTAssertTrue(contentController.host(webView: webView))
 
+        XCTAssertEqual(contentController.edgesForExtendedLayout, .all)
+        XCTAssertTrue(contentController.extendedLayoutIncludesOpaqueBars)
+        XCTAssertFalse(contentController.view.insetsLayoutMarginsFromSafeArea)
+        XCTAssertFalse(webView.insetsLayoutMarginsFromSafeArea)
         XCTAssertTrue(webView.superview === contentController.view)
-        XCTAssertEqual(
-            contentController.view.subviews.filter {
-                $0 is NativeNavigationSystemTabSafeAreaObserverView
-            }.count,
-            1
-        )
+
+        let observers = contentController.view.subviews.compactMap {
+            $0 as? NativeNavigationSystemTabSafeAreaObserverView
+        }
+        XCTAssertEqual(observers.count, 1)
+        XCTAssertTrue(observers[0].hostedWebView === webView)
 
         XCTAssertTrue(contentController.host(webView: webView))
         XCTAssertEqual(
@@ -88,5 +127,52 @@ final class NativeNavigationSystemTabSafeAreaTests: XCTestCase {
             }.count,
             1
         )
+    }
+
+    @MainActor
+    func testWKWebViewFrameReachesTheSystemTabControllerBottom() throws {
+        guard #available(iOS 26.0, *) else {
+            throw XCTSkip("System Liquid Glass is available on iOS 26 or newer")
+        }
+
+        let tabController = NativeNavigationTabController()
+        let contentController = NativeNavigationTabContentController()
+        contentController.tabBarItem = UITabBarItem(title: "Home", image: nil, tag: 0)
+        tabController.setViewControllers([contentController], animated: false)
+        tabController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        tabController.view.setNeedsLayout()
+        tabController.view.layoutIfNeeded()
+
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 761))
+        XCTAssertTrue(contentController.host(webView: webView))
+
+        guard let contentContainer = contentController.view.superview,
+              let observer = contentController.view.subviews.first(where: {
+                  $0 is NativeNavigationSystemTabSafeAreaObserverView
+              }) as? NativeNavigationSystemTabSafeAreaObserverView else {
+            return XCTFail("System tab hosting hierarchy was not installed")
+        }
+
+        let systemBounds = tabController.view.convert(
+            tabController.view.bounds,
+            to: contentContainer
+        )
+        let shortenedHeight = max(1, systemBounds.height - 83)
+        contentController.view.frame = CGRect(
+            x: systemBounds.minX,
+            y: systemBounds.minY,
+            width: systemBounds.width,
+            height: shortenedHeight
+        )
+        webView.frame = contentController.view.bounds
+
+        observer.synchronize()
+
+        XCTAssertEqual(
+            contentController.view.frame.maxY,
+            systemBounds.maxY,
+            accuracy: 0.5
+        )
+        XCTAssertEqual(webView.frame, contentController.view.bounds)
     }
 }
