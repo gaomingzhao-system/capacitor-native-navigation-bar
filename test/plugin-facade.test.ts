@@ -7,22 +7,11 @@ import type {
 } from "../src/definitions"
 import { createNativeNavigationFacade } from "../src/plugin-facade"
 
-const emptyInsets = {
-  insets: {
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    navbarHeight: 0,
-    tabbarHeight: 0,
-  },
-}
-
 const makeBridge = () => {
   let tabSelectListener: ((event: NativeNavigationTabSelectEvent) => void) | undefined
-  const configure = vi.fn(async () => emptyInsets)
-  const setNavbar = vi.fn(async () => emptyInsets)
-  const setTabbar = vi.fn(async () => emptyInsets)
+  const configure = vi.fn(async () => {})
+  const setNavbar = vi.fn(async () => {})
+  const setTabbar = vi.fn(async () => {})
   const bridge = {
     configure,
     setNavbar,

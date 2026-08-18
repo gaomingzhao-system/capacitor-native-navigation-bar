@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 type Options = Record<string, unknown>
 
-const configure = vi.fn(async (_options: Options) => ({ insets: {} }))
-const setNavbar = vi.fn(async (_options: Options) => ({ insets: {} }))
-const setTabbar = vi.fn(async (_options: Options) => ({ insets: {} }))
+const configure = vi.fn(async (_options: Options) => {})
+const setNavbar = vi.fn(async (_options: Options) => {})
+const setTabbar = vi.fn(async (_options: Options) => {})
 
 vi.mock("@capacitor/core", () => ({
   registerPlugin: () => ({ configure, setNavbar, setTabbar }),
@@ -45,7 +45,6 @@ describe("defineNativeNavigationElements", () => {
     expect(configure.mock.calls[0][0]).toMatchObject({
       enabled: true,
       platformStyle: "auto",
-      contentInsetMode: "css",
     })
   })
 
