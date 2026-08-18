@@ -1,7 +1,7 @@
 # Platform Support
 
 Platform, toolchain, runtime-safety, and release requirements for
-`capacitor-native-navigation-bar` **7.2.1**.
+`capacitor-native-navigation-bar` **7.2.2**.
 
 ## Compatibility matrix
 
