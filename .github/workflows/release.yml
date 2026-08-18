@@ -6,7 +6,7 @@ on:
       expected_version:
         description: Version expected in package.json
         required: true
-        default: "7.2.1"
+        default: "7.2.2"
         type: string
       npm_tag:
         description: npm dist-tag
