@@ -83,14 +83,7 @@ export function defineNativeNavigationElements(): void {
 
   class CapNativeNavigationProvider extends NativeNavigationElement {
     static get observedAttributes(): string[] {
-      return [
-        "enabled",
-        "platform-style",
-        "content-inset-mode",
-        "animation-duration",
-        "colors",
-        "glass",
-      ]
+      return ["enabled", "platform-style", "animation-duration", "colors", "glass"]
     }
 
     protected override applyState(): Promise<unknown> {
@@ -102,11 +95,6 @@ export function defineNativeNavigationElements(): void {
             this,
             "platform-style",
           ) ?? "auto",
-        contentInsetMode:
-          typedAttribute<NonNullable<NativeNavigationConfigureOptions["contentInsetMode"]>>(
-            this,
-            "content-inset-mode",
-          ) ?? "css",
         colors: parseJsonAttribute(
           this,
           "colors",

@@ -7,9 +7,6 @@ import type { PluginListenerHandle } from "@capacitor/core"
 /** Platform rendering preference for the native bars. */
 export type NativeNavigationPlatformStyle = "auto" | "ios" | "android"
 
-/** How the plugin exposes native-navigation content insets to web content. */
-export type NativeNavigationContentInsetMode = "css" | "none"
-
 /** Navigation animation direction. */
 export type NativeNavigationTransitionDirection =
   | "forward"
@@ -195,9 +192,6 @@ export interface NativeNavigationConfigureOptions {
   /** Native style preference. `auto` uses the current platform. */
   platformStyle?: NativeNavigationPlatformStyle
 
-  /** When `css`, the plugin writes CSS variables on `document.documentElement`. */
-  contentInsetMode?: NativeNavigationContentInsetMode
-
   /** Default native transition duration in milliseconds. */
   animationDuration?: number
 
@@ -349,7 +343,7 @@ export interface NativeNavigationTabbarStyle {
   maxWidth?: number
 
   /**
-   * Bottom gap above the platform safe area in native points/dp. Used on
+   * Bottom gap from the container's bottom edge in native points/dp. Used on
    * custom tab bar paths; on the system `UITabBarController` path UIKit owns
    * the layout. Defaults to `10` for `floating` and `0` for `curve`.
    */
@@ -454,44 +448,6 @@ export interface NativeNavigationTabbarOptions {
   animated?: boolean
 }
 
-/** Insets exposed to web content. */
-export interface NativeNavigationInsets {
-  /** Top content-avoidance inset reported to the WebView. */
-  top: number
-
-  /** Right content-avoidance inset reported to the WebView. */
-  right: number
-
-  /**
-   * Bottom content-avoidance inset reported to the WebView.
-   *
-   * On the iOS 26 system Liquid Glass tab-bar path, this excludes the
-   * system-owned bottom safe area. Custom and earlier-iOS paths retain the
-   * safe-area-inclusive calculation.
-   */
-  bottom: number
-
-  /** Left content-avoidance inset reported to the WebView. */
-  left: number
-
-  /** Reported native navbar contribution to the WebView content inset. */
-  navbarHeight: number
-
-  /**
-   * Reported native tab-bar contribution to the WebView content inset.
-   *
-   * This is not guaranteed to equal the full physical UITabBar frame on the
-   * iOS 26 system Liquid Glass path because the system-owned safe area is
-   * excluded.
-   */
-  tabbarHeight: number
-}
-
-/** Returned by methods that may change safe content bounds. */
-export interface NativeNavigationInsetsResult {
-  insets: NativeNavigationInsets
-}
-
 /** Begin a native transition transaction before JS changes route content. */
 export interface NativeNavigationBeginTransitionOptions {
   id?: string
@@ -548,15 +504,6 @@ export interface NativeNavigationTabSelectEvent {
   title?: string
 }
 
-/**
- * Emitted when the plugin-reported native-navigation content insets change.
- * These values are content-avoidance insets, not raw operating-system
- * safe-area measurements.
- */
-export interface NativeNavigationSafeAreaChangedEvent {
-  insets: NativeNavigationInsets
-}
-
 export interface NativeNavigationTransitionEvent {
   id: string
   direction: NativeNavigationTransitionDirection
@@ -565,14 +512,14 @@ export interface NativeNavigationTransitionEvent {
 
 /** Framework-agnostic native navigation chrome API. */
 export interface NativeNavigationPlugin {
-  /** Configure the native chrome host and content inset behavior. */
-  configure(options?: NativeNavigationConfigureOptions): Promise<NativeNavigationInsetsResult>
+  /** Configure the native chrome host. */
+  configure(options?: NativeNavigationConfigureOptions): Promise<void>
 
   /** Render or update the native navbar. */
-  setNavbar(options: NativeNavigationNavbarOptions): Promise<NativeNavigationInsetsResult>
+  setNavbar(options: NativeNavigationNavbarOptions): Promise<void>
 
   /** Render or update the native tabbar. */
-  setTabbar(options: NativeNavigationTabbarOptions): Promise<NativeNavigationInsetsResult>
+  setTabbar(options: NativeNavigationTabbarOptions): Promise<void>
 
   /** Capture the current WebView and prepare a native transition. */
   beginTransition(
@@ -600,11 +547,6 @@ export interface NativeNavigationPlugin {
   addListener(
     eventName: "tabSelect",
     listenerFunc: (event: NativeNavigationTabSelectEvent) => void,
-  ): Promise<PluginListenerHandle>
-
-  addListener(
-    eventName: "safeAreaChanged",
-    listenerFunc: (event: NativeNavigationSafeAreaChangedEvent) => void,
   ): Promise<PluginListenerHandle>
 
   addListener(
