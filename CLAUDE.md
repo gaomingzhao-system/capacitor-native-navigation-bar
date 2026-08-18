@@ -9,8 +9,9 @@ file in this repository.
 
 A **Capacitor 7** plugin (npm package, **ESM only**) that renders native
 navigation chrome — a navbar and a tab bar — on top of a Capacitor WebView,
-reports safe-area insets as CSS variables, and plays native snapshot
-transitions while JavaScript swaps routes.
+and plays native snapshot transitions while JavaScript swaps routes. The
+plugin does not read or report device safe-area/inset information; hosting
+apps handle their own safe-area layout (e.g. `env(safe-area-inset-*)` in CSS).
 
 - Package name: `capacitor-native-navigation-bar`
 - Bridge name (must never change): `NativeNavigation`
@@ -35,11 +36,7 @@ src/                  TypeScript source (the npm package)
 
 android/              Android (Java) native implementation
 ios/Sources/          Swift native implementation
-  NativeNavigationBarPlugin/NativeNavigationSafeArea.swift
-                      iOS system/custom tabbar inset calculation helper
 ios/Tests/            Swift native tests
-  NativeNavigationBarPluginTests/NativeNavigationSafeAreaTests.swift
-                      system Liquid Glass safe-area regression tests
 
 test/                 Vitest tests for the TypeScript layer (55 tests across 4 files)
 scripts/
@@ -199,29 +196,17 @@ a separate release, not something this package spans today.
 
 ---
 
-## CSS variables injected by the plugin
+## No safe-area/inset reporting
 
-When `contentInsetMode` is `"css"` (the default), the plugin writes these on
-`document.documentElement`:
-
-```
---cap-native-navigation-top      navbar inset (px)
---cap-native-navigation-right    right inset (px)
---cap-native-navigation-bottom   tabbar inset (px)
---cap-native-navigation-left     left inset (px)
---cap-native-navbar-height       navbar height (px)
---cap-native-tabbar-height       tabbar height (px)
-```
-
-### iOS 26 system Liquid Glass inset invariant
-
-When the floating tab bar uses the iOS 26 system Liquid Glass
-`UITabBarController`, UIKit already owns the bottom safe area. The plugin must
-report only the remaining tab-bar content inset and must not add
-`safeAreaInsets.bottom` a second time.
-
-Only that system path excludes the bottom safe area. Custom, curve, non-glass,
-and iOS 15–25 paths keep the existing safe-area-inclusive behavior.
+The plugin does not compute or expose safe-area or content-inset information
+in any form — no CSS variables, no `insets` return value, and no change
+event. Native chrome (navbar/tabbar) is positioned at the raw view edges on
+both platforms; hosting apps are responsible for their own safe-area layout
+(e.g. `env(safe-area-inset-*)` in CSS) and for avoiding overlap with the
+native bars. Do not reintroduce inset computation, CSS variable injection, or
+a `configure({ contentInsetMode })`-style option — this was deliberately
+removed; see git history around the "remove safe-area logic" change for
+context.
 
 ---
 
@@ -246,14 +231,13 @@ rejection) so the queue stays alive.
 Each event is emitted via both `NativeNavigation.addListener(...)` and a
 `CustomEvent` on `window` under the name `capNativeNavigation:<eventName>`.
 
-| Event name        | Payload type                           |
-| ----------------- | -------------------------------------- |
-| `navbarBack`      | `NativeNavigationBackEvent`            |
-| `navbarItemTap`   | `NativeNavigationBarItemTapEvent`      |
-| `tabSelect`       | `NativeNavigationTabSelectEvent`       |
-| `safeAreaChanged` | `NativeNavigationSafeAreaChangedEvent` |
-| `transitionStart` | `NativeNavigationTransitionEvent`      |
-| `transitionEnd`   | `NativeNavigationTransitionEvent`      |
+| Event name        | Payload type                      |
+| ----------------- | --------------------------------- |
+| `navbarBack`      | `NativeNavigationBackEvent`       |
+| `navbarItemTap`   | `NativeNavigationBarItemTapEvent` |
+| `tabSelect`       | `NativeNavigationTabSelectEvent`  |
+| `transitionStart` | `NativeNavigationTransitionEvent` |
+| `transitionEnd`   | `NativeNavigationTransitionEvent` |
 
 `transitionEnd` can also be emitted by the native transition **watchdog** (see
 `PLATFORM.md § Transition lifecycle safety net`) if `finishTransition` is
@@ -317,8 +301,9 @@ Do not add `CLAUDE.md` or any dev-only file to this list.
 - Do not add Capacitor 8 support (aliases, ranges, dual tsconfig, dual
   typecheck scripts) to this release — it is Capacitor 7 only.
 - Do not add `CLAUDE.md` to the npm `files` array.
-- Do not exclude the bottom safe area from all tab bar paths simply because iOS 26 is running.
-- Do not add `safeAreaInsets.bottom` back into the system Liquid Glass tab-bar path.
-- Do not remove the safe area calculation from custom tab bar paths.
-- Do not delete the regression tests in `NativeNavigationSafeAreaTests.swift`.
-- Do not change inset behavior without simultaneously updating `README.md`, `README.ja.md`, `PLATFORM.md`, and JSDoc definitions.
+- Do not reintroduce safe-area or content-inset reporting (CSS variables, an
+  `insets` return value, a `safeAreaChanged`-style event, or a
+  `contentInsetMode` option) into the plugin, and do not reintroduce
+  safe-area-aware positioning of the native navbar/tabbar — this was
+  deliberately removed; native chrome is positioned at the raw view edges and
+  hosting apps own their own safe-area layout.
