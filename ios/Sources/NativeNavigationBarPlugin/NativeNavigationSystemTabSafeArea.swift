@@ -23,9 +23,45 @@ func nativeNavigationSystemTabBottomSafeAreaCompensation(
     return -max(0, inheritedBottomInset)
 }
 
+func nativeNavigationSystemTabExtendedContentFrame(
+    currentFrame: CGRect,
+    systemTabBounds: CGRect
+) -> CGRect {
+    let values = [
+        currentFrame.minX,
+        currentFrame.minY,
+        currentFrame.width,
+        currentFrame.height,
+        systemTabBounds.minX,
+        systemTabBounds.minY,
+        systemTabBounds.width,
+        systemTabBounds.height
+    ]
+    guard values.allSatisfy(\.isFinite),
+          currentFrame.width >= 0,
+          currentFrame.height >= 0,
+          systemTabBounds.width >= 0,
+          systemTabBounds.height >= 0 else {
+        return currentFrame
+    }
+
+    let targetMaxY = max(currentFrame.maxY, systemTabBounds.maxY)
+    guard targetMaxY > currentFrame.maxY else {
+        return currentFrame
+    }
+
+    return CGRect(
+        x: currentFrame.minX,
+        y: currentFrame.minY,
+        width: currentFrame.width,
+        height: targetMaxY - currentFrame.minY
+    )
+}
+
 @available(iOS 26.0, *)
 final class NativeNavigationSystemTabSafeAreaObserverView: UIView {
     weak var contentController: NativeNavigationTabContentController?
+    weak var hostedWebView: WKWebView?
     private(set) var bottomSafeAreaCompensation: CGFloat = 0
 
     override func safeAreaInsetsDidChange() {
@@ -40,7 +76,7 @@ final class NativeNavigationSystemTabSafeAreaObserverView: UIView {
 
     func synchronize() {
         guard let contentController,
-              contentController.tabBarController is NativeNavigationTabController else {
+              let tabController = contentController.tabBarController as? NativeNavigationTabController else {
             return
         }
 
@@ -48,6 +84,39 @@ final class NativeNavigationSystemTabSafeAreaObserverView: UIView {
             safeAreaBottom: contentController.view.safeAreaInsets.bottom,
             currentCompensation: bottomSafeAreaCompensation
         )
+
+        let contentView = contentController.view!
+        contentView.clipsToBounds = false
+        tabController.view.clipsToBounds = false
+
+        var extendedFrame = contentView.frame
+        if let contentContainer = contentView.superview {
+            // UITabBarController may size its selected child only to the area
+            // above the system tab bar. Extend that child to the controller's
+            // physical bottom so the WKWebView can render behind Liquid Glass.
+            contentContainer.clipsToBounds = false
+            let systemTabBounds = tabController.view.convert(
+                tabController.view.bounds,
+                to: contentContainer
+            )
+            extendedFrame = nativeNavigationSystemTabExtendedContentFrame(
+                currentFrame: contentView.frame,
+                systemTabBounds: systemTabBounds
+            )
+        }
+
+        UIView.performWithoutAnimation {
+            if contentView.frame != extendedFrame {
+                contentView.frame = extendedFrame
+            }
+            if let hostedWebView, hostedWebView.superview === contentView {
+                hostedWebView.frame = contentView.bounds
+            }
+            if self.frame != contentView.bounds {
+                self.frame = contentView.bounds
+            }
+        }
+
         guard abs(nextCompensation - bottomSafeAreaCompensation) > 0.5 else {
             return
         }
@@ -62,17 +131,28 @@ final class NativeNavigationSystemTabSafeAreaObserverView: UIView {
 extension NativeNavigationTabContentController {
     @discardableResult
     func host(webView: WKWebView) -> Bool {
-        if #available(iOS 26.0, *) {
-            installSystemTabSafeAreaObserver()
+        guard host(webView: webView as UIView) else {
+            return false
         }
-        return host(webView: webView as UIView)
+
+        if #available(iOS 26.0, *) {
+            prepareForSystemLiquidGlassHosting(webView: webView)
+        }
+        return true
     }
 
     @available(iOS 26.0, *)
-    private func installSystemTabSafeAreaObserver() {
-        // The iOS 26 system UITabBarController adds its full bottom safe area to
-        // each child. Cancel that native ownership so contentInsetMode remains the
-        // only source of WebView content avoidance and Liquid Glass can overlay it.
+    private func prepareForSystemLiquidGlassHosting(webView: WKWebView) {
+        // Extend both the child controller and the actual WKWebView. A negative
+        // additionalSafeAreaInsets value alone changes safe-area reporting but
+        // does not enlarge the UIKit-owned content frame.
+        edgesForExtendedLayout = .all
+        extendedLayoutIncludesOpaqueBars = true
+        view.insetsLayoutMarginsFromSafeArea = false
+        view.clipsToBounds = false
+        webView.insetsLayoutMarginsFromSafeArea = false
+        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+
         let observer: NativeNavigationSystemTabSafeAreaObserverView
         if let existingObserver = view.subviews.first(where: {
             $0 is NativeNavigationSystemTabSafeAreaObserverView
@@ -88,6 +168,14 @@ extension NativeNavigationTabContentController {
         }
 
         observer.contentController = self
+        observer.hostedWebView = webView
+        observer.synchronize()
+
+        // UIKit can recalculate the selected child frame after tab items are
+        // installed. Run the normal tab-controller layout once, then reapply the
+        // edge-to-edge frame using the settled hierarchy.
+        tabBarController?.view.setNeedsLayout()
+        tabBarController?.view.layoutIfNeeded()
         observer.synchronize()
     }
 }
