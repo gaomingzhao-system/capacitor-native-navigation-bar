@@ -111,7 +111,7 @@ NativeNavigation.addListener("safeAreaChanged", ({ insets }) => console.log(inse
 
 ### インセット（Insets）
 
-状態を変更するすべてのメソッドはネイティブバーが占めるインセットを返します。同じ値が `safeAreaChanged` イベントと `<html>` への CSS 変数として通知されます（`contentInsetMode: 'none'` でない限り）。
+通知される値は WebView がネイティブナビゲーションとの重なりを避けるために追加で確保すべき content-avoidance inset であり、OS の raw safe area そのものや、ネイティブバーの物理フレーム全体の高さをそのまま表すものとは限りません。状態を変更するすべてのメソッドはこれらのインセットを返します。同じ値が `safeAreaChanged` イベントと `<html>` への CSS 変数として通知されます（`contentInsetMode: 'none'` でない限り）。
 
 ```css
 body {
@@ -121,6 +121,12 @@ body {
 /* その他: --cap-native-navigation-left/right,
    --cap-native-navbar-height, --cap-native-tabbar-height */
 ```
+
+iOS 26でフローティングタブバーがsystem Liquid Glass `UITabBarController`によって管理される場合、bottom safe areaはUIKit側ですでに管理されています。この経路では同じ領域をWebView側で二重に確保しないよう、`bottom`と`tabbarHeight`から`safeAreaInsets.bottom`を除外します。
+
+custom tab bar、`curve`シェイプ、Liquid Glassを使用しない経路、およびiOS 15〜25では、従来どおりbottom safe areaを含む値を返します。
+
+プラグインのCSS変数を使用する場合、system Liquid Glass経路で`--cap-native-navigation-bottom`へ`env(safe-area-inset-bottom)`を無条件に再加算しないでください。再加算すると、今回防止した下部余白の重複が再発する可能性があります。
 
 値は Android の画面密度に依存せず、全プラットフォームで CSS pixel／native point
 単位です。`contentInsetMode: "none"` へ切り替えると、それ以前の `"css"` 設定が
@@ -192,14 +198,14 @@ await NativeNavigation.finishTransition({ direction: "forward" })
 
 ### イベント
 
-| イベント名        | ペイロードの型                         | 説明                                                   |
-| ----------------- | -------------------------------------- | ------------------------------------------------------ |
-| `navbarBack`      | `NativeNavigationBackEvent`            | ネイティブ navbar の戻るボタンがタップされたときに発火 |
-| `navbarItemTap`   | `NativeNavigationBarItemTapEvent`      | navbar の左右アクションボタンがタップされたときに発火  |
-| `tabSelect`       | `NativeNavigationTabSelectEvent`       | タブ項目が選択されたときに発火                         |
-| `safeAreaChanged` | `NativeNavigationSafeAreaChangedEvent` | ネイティブのセーフエリアインセットが変化したときに発火 |
-| `transitionStart` | `NativeNavigationTransitionEvent`      | ネイティブスナップショットトランジション開始時に発火   |
-| `transitionEnd`   | `NativeNavigationTransitionEvent`      | ネイティブスナップショットトランジション完了時に発火   |
+| イベント名        | ペイロードの型                         | 説明                                                                            |
+| ----------------- | -------------------------------------- | ------------------------------------------------------------------------------- |
+| `navbarBack`      | `NativeNavigationBackEvent`            | ネイティブ navbar の戻るボタンがタップされたときに発火                          |
+| `navbarItemTap`   | `NativeNavigationBarItemTapEvent`      | navbar の左右アクションボタンがタップされたときに発火                           |
+| `tabSelect`       | `NativeNavigationTabSelectEvent`       | タブ項目が選択されたときに発火                                                  |
+| `safeAreaChanged` | `NativeNavigationSafeAreaChangedEvent` | プラグインが通知するネイティブナビゲーション用content insetが変化したときに発火 |
+| `transitionStart` | `NativeNavigationTransitionEvent`      | ネイティブスナップショットトランジション開始時に発火                            |
+| `transitionEnd`   | `NativeNavigationTransitionEvent`      | ネイティブスナップショットトランジション完了時に発火                            |
 
 各イベントは `window` 上でも `capNativeNavigation:<eventName>` として配信されます。
 
@@ -214,7 +220,7 @@ await NativeNavigation.finishTransition({ direction: "forward" })
 
 ## プラットフォームごとの動作
 
-- **iOS 26+**: フローティングタブバーにシステムの Liquid Glass `UITabBarController` を使用し、カスタムカプセルには `UIGlassEffect` を使用します。iOS 15〜25 では `UIBlurEffect` マテリアルにフォールバックします。Liquid Glass パス全体はランタイムの `if #available` チェックで保護されているため、iOS 15 フロアでも問題なくコンパイル・動作します。
+- **iOS 26+**: フローティングタブバーにシステムの Liquid Glass `UITabBarController` を使用し、カスタムカプセルには `UIGlassEffect` を使用します。system Liquid Glass タブバー経路では、下部余白の重複を防ぐため、通知される bottom inset からシステム管理下の bottom safe area を除外します。カスタムカプセルおよび旧 iOS 経路では、従来どおり bottom safe area を含む計算を維持します。iOS 15〜25 では `UIBlurEffect` マテリアルにフォールバックします。Liquid Glass パス全体はランタイムの `if #available` チェックで保護されているため、iOS 15 フロアでも問題なくコンパイル・動作します。
 - **Android 12+**: WebView の後ろに `RenderEffect` ブラーで `liquidGlass` エフェクトを描画します。Android 11 は半透明サーフェスにフォールバックします。
 - アイコンはインライン SVG（両プラットフォームでネイティブ描画）、SF Symbols、バンドル済み画像/drawable 名に対応しています。
 

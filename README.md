@@ -120,9 +120,11 @@ NativeNavigation.addListener("safeAreaChanged", ({ insets }) => console.log(inse
 
 ### Insets
 
-Every state-changing method resolves with the insets the native bars occupy, and
-the same values are pushed as a `safeAreaChanged` event plus CSS variables on
-`<html>` (unless `contentInsetMode: 'none'`):
+The reported values are content-avoidance insets for the WebView, not raw
+system safe-area measurements or necessarily the full physical frame of the
+native bar. Every state-changing method resolves with these insets, and the same
+values are pushed as a `safeAreaChanged` event plus CSS variables on `<html>`
+(unless `contentInsetMode: 'none'`):
 
 ```css
 body {
@@ -132,6 +134,17 @@ body {
 /* also: --cap-native-navigation-left/right,
    --cap-native-navbar-height, --cap-native-tabbar-height */
 ```
+
+On iOS 26, when the floating tab bar is hosted by the system Liquid Glass
+`UITabBarController`, UIKit already owns the bottom safe area. In that path,
+`bottom` and `tabbarHeight` exclude `safeAreaInsets.bottom` so web content does
+not reserve the same area twice. Custom tab bars, curve-shaped bars, explicit
+non-glass paths, and iOS 15–25 retain the existing safe-area-inclusive
+calculation.
+
+When relying on the plugin CSS variables, do not unconditionally add
+`env(safe-area-inset-bottom)` to `--cap-native-navigation-bottom` on the system
+Liquid Glass path, because doing so can recreate the duplicate bottom spacing.
 
 The values are CSS pixels/native points on every platform, independent of the
 Android display density. Switching to `contentInsetMode: "none"` removes any
@@ -206,14 +219,14 @@ Call `defineNativeNavigationElements()` to register custom elements in the brows
 
 ### Events
 
-| Event name        | Payload type                           | Description                                             |
-| ----------------- | -------------------------------------- | ------------------------------------------------------- |
-| `navbarBack`      | `NativeNavigationBackEvent`            | Fired when the native navbar back affordance is tapped  |
-| `navbarItemTap`   | `NativeNavigationBarItemTapEvent`      | Fired when a navbar left or right action item is tapped |
-| `tabSelect`       | `NativeNavigationTabSelectEvent`       | Fired when a tab item is selected                       |
-| `safeAreaChanged` | `NativeNavigationSafeAreaChangedEvent` | Fired when native safe area insets change               |
-| `transitionStart` | `NativeNavigationTransitionEvent`      | Fired when a native snapshot transition starts          |
-| `transitionEnd`   | `NativeNavigationTransitionEvent`      | Fired when a native snapshot transition finishes        |
+| Event name        | Payload type                           | Description                                                     |
+| ----------------- | -------------------------------------- | --------------------------------------------------------------- |
+| `navbarBack`      | `NativeNavigationBackEvent`            | Fired when the native navbar back affordance is tapped          |
+| `navbarItemTap`   | `NativeNavigationBarItemTapEvent`      | Fired when a navbar left or right action item is tapped         |
+| `tabSelect`       | `NativeNavigationTabSelectEvent`       | Fired when a tab item is selected                               |
+| `safeAreaChanged` | `NativeNavigationSafeAreaChangedEvent` | Fired when the reported native-navigation content insets change |
+| `transitionStart` | `NativeNavigationTransitionEvent`      | Fired when a native snapshot transition starts                  |
+| `transitionEnd`   | `NativeNavigationTransitionEvent`      | Fired when a native snapshot transition finishes                |
 
 Each event is also dispatched on `window` as `capNativeNavigation:<eventName>`.
 
@@ -229,8 +242,11 @@ All option, event, and result types are exported from the package root and defin
 ## Platform behavior
 
 - **iOS 26+** uses the system Liquid Glass `UITabBarController` for floating tab
-  bars, and `UIGlassEffect` for the custom capsule. iOS 15–25 fall back to
-  `UIBlurEffect` materials — the whole Liquid Glass path is behind runtime
+  bars, and `UIGlassEffect` for the custom capsule. On the system Liquid Glass
+  tab bar path, the plugin excludes the system-owned bottom safe area from the
+  reported bottom inset to prevent duplicate spacing. Custom capsules and earlier
+  iOS paths retain the existing safe-area-inclusive calculation. iOS 15–25 fall
+  back to `UIBlurEffect` materials — the whole Liquid Glass path is behind runtime
   `if #available` checks, so it compiles and runs cleanly at the iOS 15 floor.
 - **Android 12+** renders the `liquidGlass` effect with a `RenderEffect` blur of
   the WebView behind the bars. Android 11 uses a translucent surface fallback.
