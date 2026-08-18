@@ -12,46 +12,55 @@ import XCTest
 @testable import NativeNavigationBarPlugin
 
 final class NativeNavigationSystemTabSafeAreaTests: XCTestCase {
-    func testSystemSafeAreaIsConvertedToNegativeAdditionalInset() {
+    func testSystemTabCompensatesTheInheritedBottomSafeArea() {
         XCTAssertEqual(
-            nativeNavigationSystemTabAdditionalSafeAreaBottom(systemSafeAreaBottom: 34),
-            -34
+            nativeNavigationSystemTabBottomSafeAreaCompensation(
+                safeAreaBottom: 83,
+                currentCompensation: 0
+            ),
+            -83
         )
+    }
+
+    func testCompensationRemainsStableAfterUIKitRecalculatesTheSafeArea() {
         XCTAssertEqual(
-            nativeNavigationSystemTabAdditionalSafeAreaBottom(systemSafeAreaBottom: 0),
-            0
+            nativeNavigationSystemTabBottomSafeAreaCompensation(
+                safeAreaBottom: 0,
+                currentCompensation: -83
+            ),
+            -83
+        )
+    }
+
+    func testCompensationTracksSafeAreaChangesWithoutDoubleSubtracting() {
+        XCTAssertEqual(
+            nativeNavigationSystemTabBottomSafeAreaCompensation(
+                safeAreaBottom: 34,
+                currentCompensation: -49
+            ),
+            -83
         )
     }
 
     func testInvalidOrNegativeSafeAreaDoesNotCreatePositiveInset() {
         XCTAssertEqual(
-            nativeNavigationSystemTabAdditionalSafeAreaBottom(systemSafeAreaBottom: -12),
+            nativeNavigationSystemTabBottomSafeAreaCompensation(
+                safeAreaBottom: -12,
+                currentCompensation: 0
+            ),
             0
         )
         XCTAssertEqual(
-            nativeNavigationSystemTabAdditionalSafeAreaBottom(systemSafeAreaBottom: .nan),
+            nativeNavigationSystemTabBottomSafeAreaCompensation(
+                safeAreaBottom: .nan,
+                currentCompensation: 0
+            ),
             0
         )
     }
 
     @MainActor
-    func testAdditionalInsetPreservesOtherEdges() {
-        let controller = UIViewController()
-        controller.additionalSafeAreaInsets = UIEdgeInsets(top: 1, left: 2, bottom: 3, right: 4)
-
-        nativeNavigationApplySystemTabAdditionalSafeArea(
-            systemSafeAreaBottom: 34,
-            to: controller
-        )
-
-        XCTAssertEqual(controller.additionalSafeAreaInsets.top, 1)
-        XCTAssertEqual(controller.additionalSafeAreaInsets.left, 2)
-        XCTAssertEqual(controller.additionalSafeAreaInsets.bottom, -34)
-        XCTAssertEqual(controller.additionalSafeAreaInsets.right, 4)
-    }
-
-    @MainActor
-    func testWKWebViewHostingInstallsEdgeToEdgeSystemTabHandling() throws {
+    func testWKWebViewHostingInstallsSystemTabSafeAreaCompensation() throws {
         guard #available(iOS 26.0, *) else {
             throw XCTSkip("System Liquid Glass is available on iOS 26 or newer")
         }
@@ -64,13 +73,20 @@ final class NativeNavigationSystemTabSafeAreaTests: XCTestCase {
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         XCTAssertTrue(contentController.host(webView: webView))
 
-        XCTAssertEqual(contentController.edgesForExtendedLayout, .all)
-        XCTAssertTrue(contentController.extendedLayoutIncludesOpaqueBars)
-        XCTAssertFalse(contentController.view.insetsLayoutMarginsFromSafeArea)
-        XCTAssertFalse(webView.insetsLayoutMarginsFromSafeArea)
         XCTAssertTrue(webView.superview === contentController.view)
-        XCTAssertTrue(contentController.view.subviews.contains(where: {
-            $0 is NativeNavigationSystemTabSafeAreaObserverView
-        }))
+        XCTAssertEqual(
+            contentController.view.subviews.filter {
+                $0 is NativeNavigationSystemTabSafeAreaObserverView
+            }.count,
+            1
+        )
+
+        XCTAssertTrue(contentController.host(webView: webView))
+        XCTAssertEqual(
+            contentController.view.subviews.filter {
+                $0 is NativeNavigationSystemTabSafeAreaObserverView
+            }.count,
+            1
+        )
     }
 }
