@@ -9,33 +9,22 @@
 import UIKit
 import WebKit
 
-func nativeNavigationSystemTabAdditionalSafeAreaBottom(
-    systemSafeAreaBottom: CGFloat
+func nativeNavigationSystemTabBottomSafeAreaCompensation(
+    safeAreaBottom: CGFloat,
+    currentCompensation: CGFloat
 ) -> CGFloat {
-    guard systemSafeAreaBottom.isFinite else {
+    guard safeAreaBottom.isFinite,
+          currentCompensation.isFinite else {
         return 0
     }
-    return -max(0, systemSafeAreaBottom)
-}
-
-func nativeNavigationApplySystemTabAdditionalSafeArea(
-    systemSafeAreaBottom: CGFloat,
-    to contentController: UIViewController
-) {
-    var insets = contentController.additionalSafeAreaInsets
-    let bottom = nativeNavigationSystemTabAdditionalSafeAreaBottom(
-        systemSafeAreaBottom: systemSafeAreaBottom
-    )
-    guard insets.bottom != bottom else {
-        return
-    }
-    insets.bottom = bottom
-    contentController.additionalSafeAreaInsets = insets
+    let inheritedBottomInset = safeAreaBottom - currentCompensation
+    return -max(0, inheritedBottomInset)
 }
 
 @available(iOS 26.0, *)
 final class NativeNavigationSystemTabSafeAreaObserverView: UIView {
     weak var contentController: NativeNavigationTabContentController?
+    private(set) var bottomSafeAreaCompensation: CGFloat = 0
 
     override func safeAreaInsetsDidChange() {
         super.safeAreaInsetsDidChange()
@@ -52,11 +41,19 @@ final class NativeNavigationSystemTabSafeAreaObserverView: UIView {
               contentController.tabBarController is NativeNavigationTabController else {
             return
         }
-        let systemSafeAreaBottom = contentController.tabBarController?.view.safeAreaInsets.bottom ?? 0
-        nativeNavigationApplySystemTabAdditionalSafeArea(
-            systemSafeAreaBottom: systemSafeAreaBottom,
-            to: contentController
+
+        let nextCompensation = nativeNavigationSystemTabBottomSafeAreaCompensation(
+            safeAreaBottom: contentController.view.safeAreaInsets.bottom,
+            currentCompensation: bottomSafeAreaCompensation
         )
+        guard abs(nextCompensation - bottomSafeAreaCompensation) > 0.5 else {
+            return
+        }
+
+        bottomSafeAreaCompensation = nextCompensation
+        var insets = contentController.additionalSafeAreaInsets
+        insets.bottom = nextCompensation
+        contentController.additionalSafeAreaInsets = insets
     }
 }
 
@@ -64,18 +61,13 @@ extension NativeNavigationTabContentController {
     @discardableResult
     func host(webView: WKWebView) -> Bool {
         if #available(iOS 26.0, *) {
-            prepareForSystemLiquidGlassHosting(webView: webView)
+            installSystemTabSafeAreaObserver()
         }
         return host(webView: webView as UIView)
     }
 
     @available(iOS 26.0, *)
-    private func prepareForSystemLiquidGlassHosting(webView: WKWebView) {
-        edgesForExtendedLayout = .all
-        extendedLayoutIncludesOpaqueBars = true
-        view.insetsLayoutMarginsFromSafeArea = false
-        webView.insetsLayoutMarginsFromSafeArea = false
-
+    private func installSystemTabSafeAreaObserver() {
         let observer: NativeNavigationSystemTabSafeAreaObserverView
         if let existingObserver = view.subviews.first(where: {
             $0 is NativeNavigationSystemTabSafeAreaObserverView
