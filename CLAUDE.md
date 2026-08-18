@@ -35,6 +35,11 @@ src/                  TypeScript source (the npm package)
 
 android/              Android (Java) native implementation
 ios/Sources/          Swift native implementation
+  NativeNavigationBarPlugin/NativeNavigationSafeArea.swift
+                      iOS system/custom tabbar inset calculation helper
+ios/Tests/            Swift native tests
+  NativeNavigationBarPluginTests/NativeNavigationSafeAreaTests.swift
+                      system Liquid Glass safe-area regression tests
 
 test/                 Vitest tests for the TypeScript layer (55 tests across 4 files)
 scripts/
@@ -208,6 +213,16 @@ When `contentInsetMode` is `"css"` (the default), the plugin writes these on
 --cap-native-tabbar-height       tabbar height (px)
 ```
 
+### iOS 26 system Liquid Glass inset invariant
+
+When the floating tab bar uses the iOS 26 system Liquid Glass
+`UITabBarController`, UIKit already owns the bottom safe area. The plugin must
+report only the remaining tab-bar content inset and must not add
+`safeAreaInsets.bottom` a second time.
+
+Only that system path excludes the bottom safe area. Custom, curve, non-glass,
+and iOS 15–25 paths keep the existing safe-area-inclusive behavior.
+
 ---
 
 ## Custom elements (components.ts)
@@ -302,3 +317,8 @@ Do not add `CLAUDE.md` or any dev-only file to this list.
 - Do not add Capacitor 8 support (aliases, ranges, dual tsconfig, dual
   typecheck scripts) to this release — it is Capacitor 7 only.
 - Do not add `CLAUDE.md` to the npm `files` array.
+- Do not exclude the bottom safe area from all tab bar paths simply because iOS 26 is running.
+- Do not add `safeAreaInsets.bottom` back into the system Liquid Glass tab-bar path.
+- Do not remove the safe area calculation from custom tab bar paths.
+- Do not delete the regression tests in `NativeNavigationSafeAreaTests.swift`.
+- Do not change inset behavior without simultaneously updating `README.md`, `README.ja.md`, `PLATFORM.md`, and JSDoc definitions.
