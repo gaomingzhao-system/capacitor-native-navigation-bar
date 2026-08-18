@@ -253,7 +253,6 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
     private var tabbarHeight: CGFloat = NativeNavigationTabbarStyleConfig().totalHeight
     private var navbarVisible = false
     private var tabbarVisible = false
-    private var contentInsetMode = "css"
     private var isEnabled = true
     private var defaultTransitionDuration: TimeInterval = 0.35
     private var navbarItemPlacement: [String: String] = [:]
@@ -265,8 +264,7 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
     private var tabSelectedImages: [UIImage?] = []
     private var suppressTabSelectEvent = false
     private var configureState: [String: Any] = [
-        "enabled": true,
-        "contentInsetMode": "css"
+        "enabled": true
     ]
     private var navbarState: [String: Any] = [:]
     private var tabbarState: [String: Any] = [:]
@@ -372,7 +370,6 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             )
             let options = NativeNavigationOptions(values: self.configureState)
             self.isEnabled = options.bool("enabled", default: true)
-            self.contentInsetMode = options.string("contentInsetMode") ?? "css"
 
             if !self.isEnabled {
                 self.navContainer?.isHidden = true
@@ -389,8 +386,8 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
                 }
             }
 
-            self.updateInsetsAndNotify()
-            call.resolve(self.insetsResult())
+            self.layoutChrome()
+            call.resolve()
         }
     }
 
@@ -407,8 +404,8 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             } else {
                 self.navContainer?.isHidden = true
             }
-            self.updateInsetsAndNotify()
-            call.resolve(self.insetsResult())
+            self.layoutChrome()
+            call.resolve()
         }
     }
 
@@ -428,8 +425,8 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
                 self.tabContainer?.isHidden = true
                 self.floatingTabBar?.isHidden = true
             }
-            self.updateInsetsAndNotify()
-            call.resolve(self.insetsResult())
+            self.layoutChrome()
+            call.resolve()
         }
     }
 
@@ -985,7 +982,6 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
     @objc private func handleLayoutChange() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             self.layoutChrome()
-            self.updateInsetsAndNotify()
         }
     }
 
@@ -1005,14 +1001,12 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
         DispatchQueue.main.async {
             self.refreshTabBarBackgroundIfNeeded()
             self.layoutChrome()
-            self.updateInsetsAndNotify()
         }
     }
 
     private func refreshChromeAfterKeyboardDismiss() {
         layoutChrome()
         refreshTabBarBackgroundIfNeeded()
-        updateInsetsAndNotify()
     }
 
     private func refreshTabBarBackgroundIfNeeded() {
@@ -2282,7 +2276,6 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             return
         }
         rootView.layoutIfNeeded()
-        let safeInsets = rootView.safeAreaInsets
         let width = rootView.bounds.width
         let height = rootView.bounds.height
 
@@ -2295,9 +2288,9 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             if let navBar {
                 navbarHeight = nativeNavigationMeasuredNavigationBarHeight(navBar, width: width)
             }
-            container.frame = CGRect(x: 0, y: 0, width: width, height: safeInsets.top + navbarHeight)
+            container.frame = CGRect(x: 0, y: 0, width: width, height: navbarHeight)
             navBlurView?.frame = container.bounds
-            navBar?.frame = CGRect(x: 0, y: safeInsets.top, width: width, height: navbarHeight)
+            navBar?.frame = CGRect(x: 0, y: 0, width: width, height: navbarHeight)
         }
 
         if let container = tabContainer {
@@ -2309,7 +2302,7 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
             let trailingExtra = hasDetachedTrailing ? trailingDiameter + trailingGap : 0
             let tabbarWidth = min(availableWidth, maxWidth + trailingExtra)
             let originX = (width - tabbarWidth) / 2
-            let originY = height - safeInsets.bottom - tabbarStyle.bottomGap - tabbarStyle.totalHeight
+            let originY = height - tabbarStyle.bottomGap - tabbarStyle.totalHeight
             container.frame = CGRect(x: originX, y: originY, width: tabbarWidth, height: tabbarStyle.totalHeight)
             floatingTabBar?.frame = container.bounds
             floatingTabBar?.layer.cornerRadius = 0
@@ -2462,73 +2455,6 @@ public class NativeNavigationPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarContro
         if object.responds(to: NSSelectorFromString("setHidesSharedBackground:")) {
             object.setValue(!navbarUsesLiquidGlass, forKey: "hidesSharedBackground")
         }
-    }
-
-    private func currentInsets() -> [String: Any] {
-        let safeInsets = bridge?.viewController?.view.safeAreaInsets ?? .zero
-        let navHeight = isEnabled && navbarVisible ? navbarHeight + safeInsets.top : 0
-        // UITabBarController already owns the bottom safe area on the iOS 26
-        // system Liquid Glass path. Do not report that safe-area portion again
-        // to the WebView, otherwise the CSS inset creates duplicate bottom space.
-        let systemTabHeight = nativeNavigationSystemTabBarInsetHeight(
-            frameHeight: tabBar?.frame.height ?? 0,
-            safeAreaBottom: safeInsets.bottom,
-            excludesSafeArea: isUsingSystemTabBar && usesSystemLiquidGlass
-        )
-        let customTabHeight = tabbarHeight + safeInsets.bottom + tabbarStyle.bottomGap
-        let tabHeight = isEnabled && tabbarVisible ? (isUsingSystemTabBar ? systemTabHeight : customTabHeight) : 0
-        return [
-            "top": navHeight,
-            "right": safeInsets.right,
-            "bottom": tabHeight,
-            "left": safeInsets.left,
-            "navbarHeight": navHeight,
-            "tabbarHeight": tabHeight
-        ]
-    }
-
-    private func insetsResult() -> [String: Any] {
-        return ["insets": currentInsets()]
-    }
-
-    private func updateInsetsAndNotify() {
-        layoutChrome()
-        let insets = currentInsets()
-        if contentInsetMode == "none" {
-            let script = """
-            (() => {
-              const root = document.documentElement;
-              root.style.removeProperty('--cap-native-navigation-top');
-              root.style.removeProperty('--cap-native-navigation-right');
-              root.style.removeProperty('--cap-native-navigation-bottom');
-              root.style.removeProperty('--cap-native-navigation-left');
-              root.style.removeProperty('--cap-native-navbar-height');
-              root.style.removeProperty('--cap-native-tabbar-height');
-            })();
-            """
-            bridge?.webView?.evaluateJavaScript(script)
-            emitPluginEvent("safeAreaChanged", data: ["insets": insets])
-            return
-        }
-        let top = insets["top"] as? CGFloat ?? 0
-        let right = insets["right"] as? CGFloat ?? 0
-        let bottom = insets["bottom"] as? CGFloat ?? 0
-        let left = insets["left"] as? CGFloat ?? 0
-        let navbar = insets["navbarHeight"] as? CGFloat ?? 0
-        let tabbar = insets["tabbarHeight"] as? CGFloat ?? 0
-        let script = """
-        (() => {
-          const root = document.documentElement;
-          root.style.setProperty('--cap-native-navigation-top', '\(top)px');
-          root.style.setProperty('--cap-native-navigation-right', '\(right)px');
-          root.style.setProperty('--cap-native-navigation-bottom', '\(bottom)px');
-          root.style.setProperty('--cap-native-navigation-left', '\(left)px');
-          root.style.setProperty('--cap-native-navbar-height', '\(navbar)px');
-          root.style.setProperty('--cap-native-tabbar-height', '\(tabbar)px');
-        })();
-        """
-        bridge?.webView?.evaluateJavaScript(script)
-        emitPluginEvent("safeAreaChanged", data: ["insets": insets])
     }
 
     private func emitPluginEvent(_ name: String, data: [String: Any]) {

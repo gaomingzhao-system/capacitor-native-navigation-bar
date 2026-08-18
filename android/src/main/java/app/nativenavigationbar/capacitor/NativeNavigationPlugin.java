@@ -15,7 +15,6 @@ import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Insets;
 import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -35,7 +34,6 @@ import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.ViewParent;
 import android.view.Window;
-import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -78,14 +76,6 @@ public class NativeNavigationPlugin extends Plugin {
     private static final int DEFAULT_INACTIVE_TINT_COLOR = Color.rgb(120, 126, 137);
     private static final int DETACHED_TRAILING_GAP_DP = 10;
     private static final int MAX_INLINE_IMAGE_CHARACTERS = SvgIconRenderer.MAX_SVG_CHARACTERS * 2;
-    private static final String[] CSS_INSET_VARIABLES = {
-        "--cap-native-navigation-top",
-        "--cap-native-navigation-right",
-        "--cap-native-navigation-bottom",
-        "--cap-native-navigation-left",
-        "--cap-native-navbar-height",
-        "--cap-native-tabbar-height",
-    };
     private static final AtomicLong TRANSITION_SEQUENCE = new AtomicLong();
 
     private final NativeNavigation implementation = new NativeNavigation();
@@ -100,7 +90,6 @@ public class NativeNavigationPlugin extends Plugin {
     private View tabbarGlassSurface;
     private final JSObject configState = new JSObject()
         .put("enabled", true)
-        .put("contentInsetMode", "css")
         .put("platformStyle", "auto");
     private final JSObject navbarState = new JSObject();
     private final JSObject tabbarState = new JSObject();
@@ -109,7 +98,6 @@ public class NativeNavigationPlugin extends Plugin {
     private boolean enabled = true;
     private boolean navbarVisible = false;
     private boolean tabbarVisible = false;
-    private String contentInsetMode = "css";
     private GlassOptions defaultGlassOptions = GlassOptions.defaults();
     private GlassOptions navbarGlassOptions = GlassOptions.defaults();
     private GlassOptions tabbarGlassOptions = GlassOptions.defaults();
@@ -145,10 +133,6 @@ public class NativeNavigationPlugin extends Plugin {
     private int lastRootWidth = -1;
     private int lastRootHeight = -1;
     private View observedRoot;
-    private View insetsObserverView;
-    private Insets lastSystemInsets = Insets.NONE;
-    private boolean hasReceivedWindowInsets;
-    private boolean insetsUpdatePending;
 
     private static final class TransitionSession {
 
@@ -245,7 +229,6 @@ public class NativeNavigationPlugin extends Plugin {
             }
             mergeState(configState, call.getData(), "colors", "glass");
             enabled = configState.optBoolean("enabled", true);
-            contentInsetMode = "none".equals(configState.optString("contentInsetMode", "css")) ? "none" : "css";
             defaultGlassOptions = GlassOptions.from(configState.optJSONObject("glass"), GlassOptions.defaults());
             if (configState.has("animationDuration")) {
                 defaultTransitionMs = validatedTransitionDuration(configState.optDouble("animationDuration", DEFAULT_TRANSITION_MS));
@@ -258,8 +241,8 @@ public class NativeNavigationPlugin extends Plugin {
                 call.reject("Activity unavailable");
                 return;
             }
-            updateInsetsAndNotify();
-            call.resolve(insetsResult());
+            layoutChrome();
+            call.resolve();
         });
     }
 
@@ -270,16 +253,16 @@ public class NativeNavigationPlugin extends Plugin {
             navbarStateInitialized = true;
             if (!enabled) {
                 hideNavbarViews();
-                updateInsetsAndNotify();
-                call.resolve(insetsResult());
+                layoutChrome();
+                call.resolve();
                 return;
             }
             if (!applyNavbarState()) {
                 call.reject("Activity unavailable");
                 return;
             }
-            updateInsetsAndNotify();
-            call.resolve(insetsResult());
+            layoutChrome();
+            call.resolve();
         });
     }
 
@@ -290,16 +273,16 @@ public class NativeNavigationPlugin extends Plugin {
             tabbarStateInitialized = true;
             if (!enabled) {
                 hideTabbarViews();
-                updateInsetsAndNotify();
-                call.resolve(insetsResult());
+                layoutChrome();
+                call.resolve();
                 return;
             }
             if (!applyTabbarState()) {
                 call.reject("Activity unavailable");
                 return;
             }
-            updateInsetsAndNotify();
-            call.resolve(insetsResult());
+            layoutChrome();
+            call.resolve();
         });
     }
 
@@ -1716,12 +1699,9 @@ public class NativeNavigationPlugin extends Plugin {
         if (root == null) {
             return;
         }
-        Insets systemInsets = currentSystemInsets();
-        int status = systemInsets.top;
-        int bottom = systemInsets.bottom;
-        int navbarHeight = navbarVisible ? status + dp(DEFAULT_NAVBAR_DP) : 0;
+        int navbarHeight = navbarVisible ? dp(DEFAULT_NAVBAR_DP) : 0;
         int tabbarHeight = dp(tabbarStyle.totalHeight());
-        int tabbarBottomMargin = tabbarVisible ? bottom + dp(tabbarStyle.bottomGap) : bottom;
+        int tabbarBottomMargin = tabbarVisible ? dp(tabbarStyle.bottomGap) : 0;
 
         if (navbarContainer != null) {
             FrameLayout.LayoutParams containerParams = new FrameLayout.LayoutParams(
@@ -1735,16 +1715,13 @@ public class NativeNavigationPlugin extends Plugin {
                 dp(DEFAULT_NAVBAR_DP),
                 Gravity.TOP
             );
-            toolbarParams.topMargin = status;
-            toolbarParams.leftMargin = systemInsets.left;
-            toolbarParams.rightMargin = systemInsets.right;
             toolbar.setLayoutParams(toolbarParams);
             fillContainer(navbarGlassBackdrop);
             fillContainer(navbarGlassSurface);
         }
 
         if (tabbarBackdrop != null) {
-            int backdropHeight = tabbarVisible ? bottom + dp(tabbarStyle.bottomGap) : 0;
+            int backdropHeight = tabbarVisible ? dp(tabbarStyle.bottomGap) : 0;
             FrameLayout.LayoutParams backdropParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 backdropHeight,
@@ -1757,9 +1734,7 @@ public class NativeNavigationPlugin extends Plugin {
         if (tabbarContainer != null) {
             int rootWidth = root.getWidth() > 0 ? root.getWidth() : Resources.getSystem().getDisplayMetrics().widthPixels;
             int horizontalMargin = dp(tabbarStyle.horizontalMargin);
-            int safeLeft = Math.max(0, systemInsets.left);
-            int safeRight = Math.max(0, systemInsets.right);
-            int availableWidth = Math.max(0, rootWidth - safeLeft - safeRight - horizontalMargin * 2);
+            int availableWidth = Math.max(0, rootWidth - horizontalMargin * 2);
             int maxWidth = tabbarStyle.maxWidth > 0 ? dp(tabbarStyle.maxWidth) : availableWidth;
             boolean hasDetachedTrailing = !tabbarStyle.isCurve() && hasDetachedTrailingItem();
             int trailingExtra = hasDetachedTrailing ? dp(tabbarStyle.height) + dp(DETACHED_TRAILING_GAP_DP) : 0;
@@ -1770,7 +1745,7 @@ public class NativeNavigationPlugin extends Plugin {
                 Gravity.BOTTOM | Gravity.LEFT
             );
             tabbarContainerParams.bottomMargin = tabbarBottomMargin;
-            tabbarContainerParams.leftMargin = safeLeft + horizontalMargin + Math.max(0, (availableWidth - tabbarWidth) / 2);
+            tabbarContainerParams.leftMargin = horizontalMargin + Math.max(0, (availableWidth - tabbarWidth) / 2);
             tabbarContainer.setLayoutParams(tabbarContainerParams);
             fillContainer(tabbarGlassBackdrop);
             fillContainer(tabbarGlassSurface);
@@ -1804,41 +1779,6 @@ public class NativeNavigationPlugin extends Plugin {
         }
     }
 
-    private void updateInsetsAndNotify() {
-        layoutChrome();
-        JSObject insets = currentInsets();
-        syncCssInsets(insets);
-        JSObject event = new JSObject();
-        event.put("insets", insets);
-        emitEvent("safeAreaChanged", event);
-    }
-
-    private void syncCssInsets(JSObject insets) {
-        Bridge bridge = getBridge();
-        View webView = bridge == null ? null : bridge.getWebView();
-        if (!(webView instanceof android.webkit.WebView)) {
-            return;
-        }
-        StringBuilder script = new StringBuilder("(() => {const root=document.documentElement;");
-        if ("none".equals(contentInsetMode)) {
-            for (String variable : CSS_INSET_VARIABLES) {
-                script.append("root.style.removeProperty(").append(JSONObject.quote(variable)).append(");");
-            }
-        } else {
-            String[] keys = { "top", "right", "bottom", "left", "navbarHeight", "tabbarHeight" };
-            for (int index = 0; index < CSS_INSET_VARIABLES.length; index++) {
-                script
-                    .append("root.style.setProperty(")
-                    .append(JSONObject.quote(CSS_INSET_VARIABLES[index]))
-                    .append(",")
-                    .append(JSONObject.quote(insets.optInt(keys[index], 0) + "px"))
-                    .append(");");
-            }
-        }
-        script.append("})();");
-        ((android.webkit.WebView) webView).evaluateJavascript(script.toString(), null);
-    }
-
     private void emitEvent(String eventName, JSObject event) {
         JSObject detail = event == null ? new JSObject() : event;
         notifyListeners(eventName, detail);
@@ -1854,62 +1794,6 @@ public class NativeNavigationPlugin extends Plugin {
             detail.toString() +
             "}));";
         ((android.webkit.WebView) webView).evaluateJavascript(script, null);
-    }
-
-    private JSObject currentInsets() {
-        /*
-         * Insets describe how much of the *WebView viewport* the native bars cover.
-         * A Capacitor 7 app can set `android.adjustMarginsForEdgeToEdge` to
-         * "auto"/"force", and CapacitorWebView.edgeToEdgeHandler() then margins the
-         * WebView by the system bar insets. Measuring the chrome against the
-         * WebView's real position keeps a single code path correct whether or not
-         * that margining is active; when the WebView is not offset — the default —
-         * these expressions reduce to the plain bar heights.
-         */
-        Insets systemInsets = currentSystemInsets();
-        Rect webViewGaps = webViewGapsInRoot();
-        int topPx = navbarVisible ? Math.max(0, systemInsets.top + dp(DEFAULT_NAVBAR_DP) - webViewGaps.top) : 0;
-        int bottomPx = tabbarVisible
-            ? Math.max(0, systemInsets.bottom + dp(tabbarStyle.totalHeight()) + dp(tabbarStyle.bottomGap) - webViewGaps.bottom)
-            : 0;
-        int leftPx = Math.max(0, systemInsets.left - webViewGaps.left);
-        int rightPx = Math.max(0, systemInsets.right - webViewGaps.right);
-        float density = displayDensity();
-        int top = NativeUnitConverter.physicalPxToCssPx(topPx, density);
-        int right = NativeUnitConverter.physicalPxToCssPx(rightPx, density);
-        int bottom = NativeUnitConverter.physicalPxToCssPx(bottomPx, density);
-        int left = NativeUnitConverter.physicalPxToCssPx(leftPx, density);
-        JSObject insets = new JSObject();
-        insets.put("top", top);
-        insets.put("right", right);
-        insets.put("bottom", bottom);
-        insets.put("left", left);
-        insets.put("navbarHeight", top);
-        insets.put("tabbarHeight", bottom);
-        return insets;
-    }
-
-    /** Insets the host already applies between the WebView and content root. */
-    private Rect webViewGapsInRoot() {
-        FrameLayout root = contentRoot();
-        Bridge bridge = getBridge();
-        View webView = bridge == null ? null : bridge.getWebView();
-        if (root == null || webView == null || webView.getWidth() <= 0 || webView.getHeight() <= 0) {
-            return new Rect();
-        }
-        RectF webViewFrame = webViewFrameInRoot(webView, root);
-        return new Rect(
-            Math.max(0, Math.round(webViewFrame.left)),
-            Math.max(0, Math.round(webViewFrame.top)),
-            Math.max(0, root.getWidth() - Math.round(webViewFrame.right)),
-            Math.max(0, root.getHeight() - Math.round(webViewFrame.bottom))
-        );
-    }
-
-    private JSObject insetsResult() {
-        JSObject result = new JSObject();
-        result.put("insets", currentInsets());
-        return result;
     }
 
     private JSObject transitionEvent(String id, String direction, int duration) {
@@ -1979,46 +1863,14 @@ public class NativeNavigationPlugin extends Plugin {
         if (observedRoot != null) {
             observedRoot.removeOnLayoutChangeListener(rootLayoutListener);
         }
-        removeFromParent(insetsObserverView);
         observedRoot = root;
         lastRootWidth = root.getWidth();
         lastRootHeight = root.getHeight();
         root.addOnLayoutChangeListener(rootLayoutListener);
-        insetsObserverView = new View(getContext());
-        insetsObserverView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        insetsObserverView.setOnApplyWindowInsetsListener((view, windowInsets) -> {
-            Insets updated = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-            boolean changed = !hasReceivedWindowInsets || !sameInsets(lastSystemInsets, updated);
-            hasReceivedWindowInsets = true;
-            lastSystemInsets = updated;
-            if (changed) {
-                scheduleInsetsUpdate(view);
-            }
-            return windowInsets;
-        });
-        root.addView(insetsObserverView, new FrameLayout.LayoutParams(0, 0));
-        insetsObserverView.requestApplyInsets();
     }
 
     private void handleRootSizeChanged() {
-        updateInsetsAndNotify();
-    }
-
-    private void scheduleInsetsUpdate(View view) {
-        if (insetsUpdatePending) {
-            return;
-        }
-        insetsUpdatePending = true;
-        view.post(() -> {
-            insetsUpdatePending = false;
-            if (view == insetsObserverView) {
-                updateInsetsAndNotify();
-            }
-        });
-    }
-
-    private boolean sameInsets(Insets first, Insets second) {
-        return first.left == second.left && first.top == second.top && first.right == second.right && first.bottom == second.bottom;
+        layoutChrome();
     }
 
     private void teardownChrome() {
@@ -2033,14 +1885,6 @@ public class NativeNavigationPlugin extends Plugin {
             observedRoot.removeOnLayoutChangeListener(rootLayoutListener);
             observedRoot = null;
         }
-        if (insetsObserverView != null) {
-            insetsObserverView.setOnApplyWindowInsetsListener(null);
-            removeFromParent(insetsObserverView);
-            insetsObserverView = null;
-        }
-        hasReceivedWindowInsets = false;
-        lastSystemInsets = Insets.NONE;
-        insetsUpdatePending = false;
         if (navbarGlassBackdrop != null) {
             navbarGlassBackdrop.clearEffect();
         }
@@ -2084,33 +1928,6 @@ public class NativeNavigationPlugin extends Plugin {
         }
         Window window = activity.getWindow();
         window.setDecorFitsSystemWindows(false);
-    }
-
-    private Insets currentSystemInsets() {
-        if (hasReceivedWindowInsets) {
-            return lastSystemInsets;
-        }
-        WindowInsets insets = rootWindowInsets();
-        if (insets != null) {
-            return insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-        }
-        return Insets.of(0, systemDimension("status_bar_height"), 0, systemDimension("navigation_bar_height"));
-    }
-
-    private WindowInsets rootWindowInsets() {
-        // Upstream dereferenced getActivity() here without a null check, which
-        // crashes when a queued call runs after the activity is gone.
-        Activity activity = getActivity();
-        if (activity == null) {
-            return null;
-        }
-        Window window = activity.getWindow();
-        return window == null ? null : window.getDecorView().getRootWindowInsets();
-    }
-
-    private int systemDimension(String name) {
-        int id = getContext().getResources().getIdentifier(name, "dimen", "android");
-        return id == 0 ? 0 : getContext().getResources().getDimensionPixelSize(id);
     }
 
     private int dp(int value) {
