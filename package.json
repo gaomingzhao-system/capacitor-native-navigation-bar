@@ -1,14 +1,13 @@
 {
   "name": "capacitor-native-navigation-bar",
   "version": "7.2.3",
-  "description": "Capacitor 7 plugin (ESM-only) for native navbar, tabbar, safe-area handling, and WebView snapshot transitions.",
+  "description": "Capacitor 7 plugin (ESM-only) for native navbar, tabbar, and WebView snapshot transitions.",
   "keywords": [
     "capacitor",
     "capacitor-plugin",
     "liquid-glass",
     "native-navigation",
     "navbar",
-    "safe-area",
     "tabbar"
   ],
   "homepage": "https://github.com/gaomingzhao666/capacitor-native-navigation-bar#readme",
