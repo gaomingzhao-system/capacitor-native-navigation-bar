@@ -85,7 +85,7 @@ final class NativeNavigationSystemTabSafeAreaTests: XCTestCase {
         XCTAssertEqual(
             nativeNavigationSystemTabExtendedContentFrame(
                 currentFrame: currentFrame,
-                systemTabBounds: CGRect(x: 0, y: 0, width: 390, height: .nan)
+                systemTabBounds: CGRect(x: 0, y: 0, width: 390, height: CGFloat.nan)
             ),
             currentFrame
         )
