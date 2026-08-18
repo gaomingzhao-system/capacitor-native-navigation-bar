@@ -133,6 +133,24 @@ Important notes regarding inset calculations:
 - This safe-area exclusion exception applies exclusively to the system Liquid Glass tab-bar path.
 - Inset calculations for `top`, `left`, and `right` remain unchanged.
 
+### iOS 26 system Liquid Glass WebView hosting
+
+Removing the child controller's inherited bottom safe area is not sufficient by
+itself: `UITabBarController` can still size the selected child view only to the
+area above the system tab bar. On the iOS 26 system Liquid Glass path, the
+plugin therefore extends that selected child controller to the physical bottom
+of the `UITabBarController` and keeps the hosted `WKWebView` equal to the
+extended child bounds. The native tab bar remains above the WebView, so the
+WebView background and scroll surface continue behind the floating glass and
+through the home-indicator region.
+
+The frame extension is recalculated during layout and safe-area changes. It is
+scoped to the iOS 26 system tab-bar host; custom, curve, non-glass, iOS 15–25,
+Android, and Web paths retain their existing frame and safe-area behavior.
+`contentInsetMode` still controls whether Web content receives avoidance CSS
+variables. With `contentInsetMode: "none"`, content may intentionally render
+edge-to-edge behind the system tab bar.
+
 Android physical pixels are converted to CSS pixels before values cross the
 bridge. Zoom-transition rectangles travel in the opposite direction, from
 viewport CSS pixels/native dp into physical native coordinates.
@@ -187,7 +205,7 @@ Repository setup required before the first release:
 
 - add an npm automation/access token as the `NPM_TOKEN` Actions secret
 - keep the release workflow on `main`
-- run the workflow with expected version `7.2.1` and npm tag `latest`
+- run the workflow with expected version `7.2.2` and npm tag `latest`
 
 `npm publish` also executes `prepublishOnly`, so Web/package verification is
 repeated immediately before publication.
