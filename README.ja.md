@@ -1,8 +1,8 @@
 # capacitor-native-navigation-bar
 
-**Capacitor 7** アプリ向けのネイティブ navbar・tabbar・セーフエリア通知・WebView スナップショットトランジション。npm パッケージとして **ESM のみ** で配布されます。
+**Capacitor 7** アプリ向けのネイティブ navbar・tabbar・WebView スナップショットトランジション。npm パッケージとして **ESM のみ** で配布されます。
 
-このプラグインは WebView の上にリアルな UIKit / Android ビューを描画し、それらが占めるビューポートの領域をイベントと CSS 変数として通知します。また、JavaScript がルートを切り替える間、WebView のスナップショット上でネイティブトランジションを再生できます。
+このプラグインは WebView の上にリアルな UIKit / Android ビューを描画し、JavaScript がルートを切り替える間、WebView のスナップショット上でネイティブトランジションを再生できます。プラグインはセーフエリアやコンテンツインセットの情報を通知しません。ネイティブのバーは画面の生の端に配置されるため、セーフエリアへの対応(CSS の `env(safe-area-inset-*)` など)やネイティブバーとの重なり回避はアプリ側の責務です。
 
 > 🇺🇸 [English README](./README.md)
 
@@ -94,7 +94,7 @@ await NativeNavigation.setNavbar({
   colors: { tint: "#0a84ff" },
 })
 
-const { insets } = await NativeNavigation.setTabbar({
+await NativeNavigation.setTabbar({
   selectedId: "home",
   tabs: [
     { id: "home", title: "ホーム", icon: { svg: "<svg …/>" } },
@@ -106,31 +106,7 @@ const { insets } = await NativeNavigation.setTabbar({
 
 NativeNavigation.addListener("tabSelect", ({ id }) => router.go(id))
 NativeNavigation.addListener("navbarBack", () => router.back())
-NativeNavigation.addListener("safeAreaChanged", ({ insets }) => console.log(insets))
 ```
-
-### インセット（Insets）
-
-通知される値は WebView がネイティブナビゲーションとの重なりを避けるために追加で確保すべき content-avoidance inset であり、OS の raw safe area そのものや、ネイティブバーの物理フレーム全体の高さをそのまま表すものとは限りません。状態を変更するすべてのメソッドはこれらのインセットを返します。同じ値が `safeAreaChanged` イベントと `<html>` への CSS 変数として通知されます（`contentInsetMode: 'none'` でない限り）。
-
-```css
-body {
-  padding-top: var(--cap-native-navigation-top);
-  padding-bottom: var(--cap-native-navigation-bottom);
-}
-/* その他: --cap-native-navigation-left/right,
-   --cap-native-navbar-height, --cap-native-tabbar-height */
-```
-
-iOS 26でフローティングタブバーがsystem Liquid Glass `UITabBarController`によって管理される場合、bottom safe areaはUIKit側ですでに管理されています。この経路では同じ領域をWebView側で二重に確保しないよう、`bottom`と`tabbarHeight`から`safeAreaInsets.bottom`を除外します。
-
-custom tab bar、`curve`シェイプ、Liquid Glassを使用しない経路、およびiOS 15〜25では、従来どおりbottom safe areaを含む値を返します。
-
-プラグインのCSS変数を使用する場合、system Liquid Glass経路で`--cap-native-navigation-bottom`へ`env(safe-area-inset-bottom)`を無条件に再加算しないでください。再加算すると、今回防止した下部余白の重複が再発する可能性があります。
-
-値は Android の画面密度に依存せず、全プラットフォームで CSS pixel／native point
-単位です。`contentInsetMode: "none"` へ切り替えると、それ以前の `"css"` 設定が
-書き込んだ変数は削除されます。
 
 `configure`、`setNavbar`、`setTabbar` は差分更新です。省略したフィールドは、
 ネストした `colors`、`glass`、`style` を含めて以前の値を維持します。状態を消す
@@ -170,9 +146,9 @@ await NativeNavigation.finishTransition({ direction: "forward" })
 
 | メソッド                     | 戻り値                                      | 説明                                                                                                                 |
 | ---------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `configure(options?)`        | `Promise<NativeNavigationInsetsResult>`     | グローバルの有効化/無効化、インセットモード、デフォルトアニメーション時間、共有カラーとガラスエフェクト。            |
-| `setNavbar(options)`         | `Promise<NativeNavigationInsetsResult>`     | タイトル、サブタイトル、戻るボタン、左右アイテム、カラー、blur/glass、大タイトル。                                   |
-| `setTabbar(options)`         | `Promise<NativeNavigationInsetsResult>`     | タブ、選択状態、ラベル/アイコン、バッジ、カラー、`floating`/`curve` シェイプ、detached trailing `search` ロール。    |
+| `configure(options?)`        | `Promise<void>`                             | グローバルの有効化/無効化、デフォルトアニメーション時間、共有カラーとガラスエフェクト。                              |
+| `setNavbar(options)`         | `Promise<void>`                             | タイトル、サブタイトル、戻るボタン、左右アイテム、カラー、blur/glass、大タイトル。                                   |
+| `setTabbar(options)`         | `Promise<void>`                             | タブ、選択状態、ラベル/アイコン、バッジ、カラー、`floating`/`curve` シェイプ、detached trailing `search` ロール。    |
 | `beginTransition(options?)`  | `Promise<NativeNavigationTransitionResult>` | WebView をスナップショットし、ネイティブトランジションの準備をします。                                               |
 | `finishTransition(options?)` | `Promise<NativeNavigationTransitionResult>` | スナップショットを現在の画面へアニメーションで切り替えます。方向: `forward`、`back`、`root`、`tab`、`zoom`、`none`。 |
 | `getPluginVersion()`         | `Promise<PluginVersionResult>`              | バージョン識別子を返します: iOS/Android では `native`、ウェブフォールバックでは `web`。                              |
@@ -192,20 +168,19 @@ await NativeNavigation.finishTransition({ direction: "forward" })
 
 | カスタム要素                       | 対応する呼び出し               | サポート属性                                                                                                                                                                                                                                                                                                     |
 | ---------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<cap-native-navigation-provider>` | `NativeNavigation.configure()` | `enabled`, `platform-style`, `content-inset-mode`, `animation-duration`, `colors`, `glass`                                                                                                                                                                                                                       |
+| `<cap-native-navigation-provider>` | `NativeNavigation.configure()` | `enabled`, `platform-style`, `animation-duration`, `colors`, `glass`                                                                                                                                                                                                                                             |
 | `<cap-native-navbar>`              | `NativeNavigation.setNavbar()` | `hidden`, `title`, `subtitle`, `large`, `transparent`, `blur-effect`, `back-button`, `back-title`, `left-items`, `right-items`, `colors`, `glass`, `animated`                                                                                                                                                    |
 | `<cap-native-tabbar>`              | `NativeNavigation.setTabbar()` | `hidden`, `tabs`, `selected-id`, `labels`, `label-visibility-mode`, `icons`, `colors`, `glass`, `style`, `blur-effect`, `disable-transparent-on-scroll-edge`, `disable-indicator`, `indicator-color`, `ripple-color`, `badge-background-color`, `badge-text-color`, `experimental-baked-tint-colors`, `animated` |
 
 ### イベント
 
-| イベント名        | ペイロードの型                         | 説明                                                                            |
-| ----------------- | -------------------------------------- | ------------------------------------------------------------------------------- |
-| `navbarBack`      | `NativeNavigationBackEvent`            | ネイティブ navbar の戻るボタンがタップされたときに発火                          |
-| `navbarItemTap`   | `NativeNavigationBarItemTapEvent`      | navbar の左右アクションボタンがタップされたときに発火                           |
-| `tabSelect`       | `NativeNavigationTabSelectEvent`       | タブ項目が選択されたときに発火                                                  |
-| `safeAreaChanged` | `NativeNavigationSafeAreaChangedEvent` | プラグインが通知するネイティブナビゲーション用content insetが変化したときに発火 |
-| `transitionStart` | `NativeNavigationTransitionEvent`      | ネイティブスナップショットトランジション開始時に発火                            |
-| `transitionEnd`   | `NativeNavigationTransitionEvent`      | ネイティブスナップショットトランジション完了時に発火                            |
+| イベント名        | ペイロードの型                    | 説明                                                   |
+| ----------------- | --------------------------------- | ------------------------------------------------------ |
+| `navbarBack`      | `NativeNavigationBackEvent`       | ネイティブ navbar の戻るボタンがタップされたときに発火 |
+| `navbarItemTap`   | `NativeNavigationBarItemTapEvent` | navbar の左右アクションボタンがタップされたときに発火  |
+| `tabSelect`       | `NativeNavigationTabSelectEvent`  | タブ項目が選択されたときに発火                         |
+| `transitionStart` | `NativeNavigationTransitionEvent` | ネイティブスナップショットトランジション開始時に発火   |
+| `transitionEnd`   | `NativeNavigationTransitionEvent` | ネイティブスナップショットトランジション完了時に発火   |
 
 各イベントは `window` 上でも `capNativeNavigation:<eventName>` として配信されます。
 
@@ -213,14 +188,14 @@ await NativeNavigation.finishTransition({ direction: "forward" })
 
 すべてのオプション・イベント・戻り値の型はパッケージのルートからエクスポートされ、[`src/definitions.ts`](./src/definitions.ts) で定義されています（`dist/index.d.ts` として同梱）:
 
-- オプション & 設定: `NativeNavigationConfigureOptions`, `NativeNavigationNavbarOptions`, `NativeNavigationTabbarOptions`, `NativeNavigationTabbarStyle`, `NativeNavigationTab`, `NativeNavigationBarButton`, `NativeNavigationBackButton`, `NativeNavigationIcon`, `NativeNavigationColors`, `NativeNavigationGlassOptions`, `NativeNavigationGlassEffect`, `NativeNavigationBlurEffect`, `NativeNavigationPlatformStyle`, `NativeNavigationContentInsetMode`, `NativeNavigationTabLabelVisibilityMode`, `NativeNavigationTabRole`, `NativeNavigationTabbarShape`。
-- トランジション & ジオメトリ: `NativeNavigationBeginTransitionOptions`, `NativeNavigationFinishTransitionOptions`, `NativeNavigationTransitionResult`, `NativeNavigationTransitionDirection`, `NativeNavigationRect`, `NativeNavigationRectTarget`, `NativeNavigationInsets`, `NativeNavigationInsetsResult`。
-- イベント & ハンドラー: `NativeNavigationBackEvent`, `NativeNavigationBarItemTapEvent`, `NativeNavigationTabSelectEvent`, `NativeNavigationSafeAreaChangedEvent`, `NativeNavigationTransitionEvent`。
+- オプション & 設定: `NativeNavigationConfigureOptions`, `NativeNavigationNavbarOptions`, `NativeNavigationTabbarOptions`, `NativeNavigationTabbarStyle`, `NativeNavigationTab`, `NativeNavigationBarButton`, `NativeNavigationBackButton`, `NativeNavigationIcon`, `NativeNavigationColors`, `NativeNavigationGlassOptions`, `NativeNavigationGlassEffect`, `NativeNavigationBlurEffect`, `NativeNavigationPlatformStyle`, `NativeNavigationTabLabelVisibilityMode`, `NativeNavigationTabRole`, `NativeNavigationTabbarShape`。
+- トランジション & ジオメトリ: `NativeNavigationBeginTransitionOptions`, `NativeNavigationFinishTransitionOptions`, `NativeNavigationTransitionResult`, `NativeNavigationTransitionDirection`, `NativeNavigationRect`, `NativeNavigationRectTarget`。
+- イベント & ハンドラー: `NativeNavigationBackEvent`, `NativeNavigationBarItemTapEvent`, `NativeNavigationTabSelectEvent`, `NativeNavigationTransitionEvent`。
 - プラグインインターフェース: `NativeNavigationPlugin`, `PluginVersionResult`。
 
 ## プラットフォームごとの動作
 
-- **iOS 26+**: フローティングタブバーにシステムの Liquid Glass `UITabBarController` を使用し、カスタムカプセルには `UIGlassEffect` を使用します。system Liquid Glass タブバー経路では、下部余白の重複を防ぐため、通知される bottom inset からシステム管理下の bottom safe area を除外します。カスタムカプセルおよび旧 iOS 経路では、従来どおり bottom safe area を含む計算を維持します。iOS 15〜25 では `UIBlurEffect` マテリアルにフォールバックします。Liquid Glass パス全体はランタイムの `if #available` チェックで保護されているため、iOS 15 フロアでも問題なくコンパイル・動作します。
+- **iOS 26+**: フローティングタブバーにシステムの Liquid Glass `UITabBarController` を使用し、カスタムカプセルには `UIGlassEffect` を使用します。iOS 15〜25 では `UIBlurEffect` マテリアルにフォールバックします。Liquid Glass パス全体はランタイムの `if #available` チェックで保護されているため、iOS 15 フロアでも問題なくコンパイル・動作します。
 - **Android 12+**: WebView の後ろに `RenderEffect` ブラーで `liquidGlass` エフェクトを描画します。Android 11 は半透明サーフェスにフォールバックします。
 - アイコンはインライン SVG（両プラットフォームでネイティブ描画）、SF Symbols、バンドル済み画像/drawable 名に対応しています。
 

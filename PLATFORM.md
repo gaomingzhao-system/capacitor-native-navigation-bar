@@ -80,11 +80,10 @@ chrome can draw edge-to-edge. This applies to the entire host Activity.
 
 ### Android feature availability
 
-| Feature                                    | Minimum API | Fallback                          |
-| ------------------------------------------ | ----------- | --------------------------------- |
-| Typed system-bar and display-cutout insets | 30          | Baseline requirement              |
-| `RenderEffect` glass blur                  | 31          | Translucent surface on Android 11 |
-| Dynamic Material You colors                | 31          | Static configured colors          |
+| Feature                     | Minimum API | Fallback                          |
+| --------------------------- | ----------- | --------------------------------- |
+| `RenderEffect` glass blur   | 31          | Translucent surface on Android 11 |
+| Dynamic Material You colors | 31          | Static configured colors          |
 
 ## JavaScript/native state parity
 
@@ -99,64 +98,21 @@ back into the native tabbar state. A later color, badge, style, or global
 configuration patch therefore cannot revert an iOS user-selected tab to an old
 `selectedId`.
 
-## Insets and CSS variables
+## No inset/safe-area reporting
 
-When `contentInsetMode` is `css`, the plugin writes:
+The plugin does not compute or expose content insets or safe-area
+information in any form. There is no `contentInsetMode` option, no CSS
+variables, no `insets` return value from `configure`/`setNavbar`/`setTabbar`,
+and no change event. Native chrome (navbar/tabbar) is positioned at the raw
+view edges on iOS and Android alike — neither platform reads the device
+safe-area/system-bar insets when laying out the bars. Hosting apps are
+responsible for their own safe-area layout (e.g. `env(safe-area-inset-*)` in
+CSS) and for avoiding overlap between their content and the native bars.
 
-```text
---cap-native-navigation-top
---cap-native-navigation-right
---cap-native-navigation-bottom
---cap-native-navigation-left
---cap-native-navbar-height
---cap-native-tabbar-height
-```
-
-The reported `bottom` and `tabbarHeight` values represent content-avoidance
-insets for the WebView, not raw operating-system safe-area measurements or
-necessarily the full physical frame of the native bar.
-
-| Platform path                               | Safe-area treatment    | Reported bottom/tabbarHeight                             |
-| ------------------------------------------- | ---------------------- | -------------------------------------------------------- |
-| iOS 26 system Liquid Glass floating tab bar | bottom safe areaを除外 | `max(frameHeight, 49 + safeAreaBottom) - safeAreaBottom` |
-| iOS 26 custom/curve/non-glass tab bar       | bottom safe areaを含む | `tabbarHeight + safeAreaBottom + bottomGap`              |
-| iOS 15–25 custom tab bar                    | bottom safe areaを含む | `tabbarHeight + safeAreaBottom + bottomGap`              |
-| Android                                     | 既存挙動のまま         | system navigation insetとnative chromeをCSS pxへ変換     |
-| Web fallback                                | OS safe areaなし       | Web fallbackのbar height                                 |
-
-Important notes regarding inset calculations:
-
-- `bottom` and `tabbarHeight` are content-avoidance values for layout purposes.
-- On the iOS 26 system Liquid Glass path, the reported inset may not match the full raw UITabBar frame because the system-owned safe area is excluded to prevent duplicate spacing.
-- If the system tab bar frame is initially 0 during first layout, a minimum height of 49pt is maintained (`49 + safeAreaBottom - safeAreaBottom = 49pt`).
-- The `safeAreaChanged` event payload and CSS variables use the identical inset computation result.
-- This safe-area exclusion exception applies exclusively to the system Liquid Glass tab-bar path.
-- Inset calculations for `top`, `left`, and `right` remain unchanged.
-
-### iOS 26 system Liquid Glass WebView hosting
-
-Removing the child controller's inherited bottom safe area is not sufficient by
-itself: `UITabBarController` can still size the selected child view only to the
-area above the system tab bar. On the iOS 26 system Liquid Glass path, the
-plugin therefore extends that selected child controller to the physical bottom
-of the `UITabBarController` and keeps the hosted `WKWebView` equal to the
-extended child bounds. The native tab bar remains above the WebView, so the
-WebView background and scroll surface continue behind the floating glass and
-through the home-indicator region.
-
-The frame extension is recalculated during layout and safe-area changes. It is
-scoped to the iOS 26 system tab-bar host; custom, curve, non-glass, iOS 15–25,
-Android, and Web paths retain their existing frame and safe-area behavior.
-`contentInsetMode` still controls whether Web content receives avoidance CSS
-variables. With `contentInsetMode: "none"`, content may intentionally render
-edge-to-edge behind the system tab bar.
-
-Android physical pixels are converted to CSS pixels before values cross the
-bridge. Zoom-transition rectangles travel in the opposite direction, from
-viewport CSS pixels/native dp into physical native coordinates.
-
-Switching to `contentInsetMode: "none"` removes variables written by an earlier
-CSS configuration.
+Android physical pixels are still converted to CSS pixels for zoom-transition
+rectangles crossing the bridge in the opposite direction, from viewport CSS
+pixels/native dp into physical native coordinates — this conversion is
+unrelated to inset reporting.
 
 ## Transition lifecycle
 
@@ -212,8 +168,8 @@ repeated immediately before publication.
 
 ## Known limitations
 
-- iOS 26 Liquid Glass rendering and bottom safe-area spacing still require final
-  physical-device visual validation.
+- iOS 26 Liquid Glass rendering still requires final physical-device visual
+  validation.
 - CocoaPods host integration is not built by CI; the iOS gate exercises Swift
   Package Manager. Test CocoaPods in at least one real consuming app before the
   first release.

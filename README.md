@@ -1,12 +1,15 @@
 # capacitor-native-navigation-bar
 
-Native navbar, tabbar, safe-area reporting, and WebView snapshot transitions for
-**Capacitor 7** apps. Ships as an **ESM-only** npm package.
+Native navbar, tabbar, and WebView snapshot transitions for **Capacitor 7**
+apps. Ships as an **ESM-only** npm package.
 
-The plugin renders real UIKit / Android views on top of the WebView, reports how
-much of the viewport they cover (as an event and as CSS variables), and can play
-a native transition over a snapshot of the WebView while JavaScript swaps the
-route underneath.
+The plugin renders real UIKit / Android views on top of the WebView and can
+play a native transition over a snapshot of the WebView while JavaScript
+swaps the route underneath. The plugin does not report safe-area or
+content-inset information — native chrome is positioned at the raw view
+edges, and your app is responsible for its own safe-area layout (e.g.
+`env(safe-area-inset-*)` in CSS) and for avoiding overlap with the native
+bars.
 
 > 🇯🇵 [日本語 README](./README.ja.md)
 
@@ -103,7 +106,7 @@ await NativeNavigation.setNavbar({
   colors: { tint: "#0a84ff" },
 })
 
-const { insets } = await NativeNavigation.setTabbar({
+await NativeNavigation.setTabbar({
   selectedId: "home",
   tabs: [
     { id: "home", title: "Home", icon: { svg: "<svg …/>" } },
@@ -115,40 +118,7 @@ const { insets } = await NativeNavigation.setTabbar({
 
 NativeNavigation.addListener("tabSelect", ({ id }) => router.go(id))
 NativeNavigation.addListener("navbarBack", () => router.back())
-NativeNavigation.addListener("safeAreaChanged", ({ insets }) => console.log(insets))
 ```
-
-### Insets
-
-The reported values are content-avoidance insets for the WebView, not raw
-system safe-area measurements or necessarily the full physical frame of the
-native bar. Every state-changing method resolves with these insets, and the same
-values are pushed as a `safeAreaChanged` event plus CSS variables on `<html>`
-(unless `contentInsetMode: 'none'`):
-
-```css
-body {
-  padding-top: var(--cap-native-navigation-top);
-  padding-bottom: var(--cap-native-navigation-bottom);
-}
-/* also: --cap-native-navigation-left/right,
-   --cap-native-navbar-height, --cap-native-tabbar-height */
-```
-
-On iOS 26, when the floating tab bar is hosted by the system Liquid Glass
-`UITabBarController`, UIKit already owns the bottom safe area. In that path,
-`bottom` and `tabbarHeight` exclude `safeAreaInsets.bottom` so web content does
-not reserve the same area twice. Custom tab bars, curve-shaped bars, explicit
-non-glass paths, and iOS 15–25 retain the existing safe-area-inclusive
-calculation.
-
-When relying on the plugin CSS variables, do not unconditionally add
-`env(safe-area-inset-bottom)` to `--cap-native-navigation-bottom` on the system
-Liquid Glass path, because doing so can recreate the duplicate bottom spacing.
-
-The values are CSS pixels/native points on every platform, independent of the
-Android display density. Switching to `contentInsetMode: "none"` removes any
-variables written by an earlier `"css"` configuration.
 
 `configure`, `setNavbar`, and `setTabbar` use patch semantics: omitted fields
 retain their previous values, including nested `colors`, `glass`, and `style`
@@ -191,9 +161,9 @@ one native call.
 
 | Method                       | Returns                                     | Notes                                                                                                       |
 | ---------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `configure(options?)`        | `Promise<NativeNavigationInsetsResult>`     | Global enable/disable, inset mode, default animation duration, shared colors and glass.                     |
-| `setNavbar(options)`         | `Promise<NativeNavigationInsetsResult>`     | Title, subtitle, back button, left/right items, colors, blur/glass, large title.                            |
-| `setTabbar(options)`         | `Promise<NativeNavigationInsetsResult>`     | Tabs, selection, labels/icons, badges, colors, `floating`/`curve` shape, detached trailing `search` role.   |
+| `configure(options?)`        | `Promise<void>`                             | Global enable/disable, default animation duration, shared colors and glass.                                 |
+| `setNavbar(options)`         | `Promise<void>`                             | Title, subtitle, back button, left/right items, colors, blur/glass, large title.                            |
+| `setTabbar(options)`         | `Promise<void>`                             | Tabs, selection, labels/icons, badges, colors, `floating`/`curve` shape, detached trailing `search` role.   |
 | `beginTransition(options?)`  | `Promise<NativeNavigationTransitionResult>` | Snapshots the WebView and prepares a native transition.                                                     |
 | `finishTransition(options?)` | `Promise<NativeNavigationTransitionResult>` | Animates the snapshot away into current view. Directions: `forward`, `back`, `root`, `tab`, `zoom`, `none`. |
 | `getPluginVersion()`         | `Promise<PluginVersionResult>`              | Returns version identifier: `native` on iOS/Android, `web` on the web fallback.                             |
@@ -213,20 +183,19 @@ Call `defineNativeNavigationElements()` to register custom elements in the brows
 
 | Custom Element                     | Maps to                        | Supported Attributes                                                                                                                                                                                                                                                                                             |
 | ---------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<cap-native-navigation-provider>` | `NativeNavigation.configure()` | `enabled`, `platform-style`, `content-inset-mode`, `animation-duration`, `colors`, `glass`                                                                                                                                                                                                                       |
+| `<cap-native-navigation-provider>` | `NativeNavigation.configure()` | `enabled`, `platform-style`, `animation-duration`, `colors`, `glass`                                                                                                                                                                                                                                             |
 | `<cap-native-navbar>`              | `NativeNavigation.setNavbar()` | `hidden`, `title`, `subtitle`, `large`, `transparent`, `blur-effect`, `back-button`, `back-title`, `left-items`, `right-items`, `colors`, `glass`, `animated`                                                                                                                                                    |
 | `<cap-native-tabbar>`              | `NativeNavigation.setTabbar()` | `hidden`, `tabs`, `selected-id`, `labels`, `label-visibility-mode`, `icons`, `colors`, `glass`, `style`, `blur-effect`, `disable-transparent-on-scroll-edge`, `disable-indicator`, `indicator-color`, `ripple-color`, `badge-background-color`, `badge-text-color`, `experimental-baked-tint-colors`, `animated` |
 
 ### Events
 
-| Event name        | Payload type                           | Description                                                     |
-| ----------------- | -------------------------------------- | --------------------------------------------------------------- |
-| `navbarBack`      | `NativeNavigationBackEvent`            | Fired when the native navbar back affordance is tapped          |
-| `navbarItemTap`   | `NativeNavigationBarItemTapEvent`      | Fired when a navbar left or right action item is tapped         |
-| `tabSelect`       | `NativeNavigationTabSelectEvent`       | Fired when a tab item is selected                               |
-| `safeAreaChanged` | `NativeNavigationSafeAreaChangedEvent` | Fired when the reported native-navigation content insets change |
-| `transitionStart` | `NativeNavigationTransitionEvent`      | Fired when a native snapshot transition starts                  |
-| `transitionEnd`   | `NativeNavigationTransitionEvent`      | Fired when a native snapshot transition finishes                |
+| Event name        | Payload type                      | Description                                             |
+| ----------------- | --------------------------------- | ------------------------------------------------------- |
+| `navbarBack`      | `NativeNavigationBackEvent`       | Fired when the native navbar back affordance is tapped  |
+| `navbarItemTap`   | `NativeNavigationBarItemTapEvent` | Fired when a navbar left or right action item is tapped |
+| `tabSelect`       | `NativeNavigationTabSelectEvent`  | Fired when a tab item is selected                       |
+| `transitionStart` | `NativeNavigationTransitionEvent` | Fired when a native snapshot transition starts          |
+| `transitionEnd`   | `NativeNavigationTransitionEvent` | Fired when a native snapshot transition finishes        |
 
 Each event is also dispatched on `window` as `capNativeNavigation:<eventName>`.
 
@@ -234,19 +203,16 @@ Each event is also dispatched on `window` as `capNativeNavigation:<eventName>`.
 
 All option, event, and result types are exported from the package root and defined in [`src/definitions.ts`](./src/definitions.ts) (shipped as `dist/index.d.ts`), including:
 
-- Options & Configurations: `NativeNavigationConfigureOptions`, `NativeNavigationNavbarOptions`, `NativeNavigationTabbarOptions`, `NativeNavigationTabbarStyle`, `NativeNavigationTab`, `NativeNavigationBarButton`, `NativeNavigationBackButton`, `NativeNavigationIcon`, `NativeNavigationColors`, `NativeNavigationGlassOptions`, `NativeNavigationGlassEffect`, `NativeNavigationBlurEffect`, `NativeNavigationPlatformStyle`, `NativeNavigationContentInsetMode`, `NativeNavigationTabLabelVisibilityMode`, `NativeNavigationTabRole`, `NativeNavigationTabbarShape`.
-- Transitions & Geometry: `NativeNavigationBeginTransitionOptions`, `NativeNavigationFinishTransitionOptions`, `NativeNavigationTransitionResult`, `NativeNavigationTransitionDirection`, `NativeNavigationRect`, `NativeNavigationRectTarget`, `NativeNavigationInsets`, `NativeNavigationInsetsResult`.
-- Events & Handlers: `NativeNavigationBackEvent`, `NativeNavigationBarItemTapEvent`, `NativeNavigationTabSelectEvent`, `NativeNavigationSafeAreaChangedEvent`, `NativeNavigationTransitionEvent`.
+- Options & Configurations: `NativeNavigationConfigureOptions`, `NativeNavigationNavbarOptions`, `NativeNavigationTabbarOptions`, `NativeNavigationTabbarStyle`, `NativeNavigationTab`, `NativeNavigationBarButton`, `NativeNavigationBackButton`, `NativeNavigationIcon`, `NativeNavigationColors`, `NativeNavigationGlassOptions`, `NativeNavigationGlassEffect`, `NativeNavigationBlurEffect`, `NativeNavigationPlatformStyle`, `NativeNavigationTabLabelVisibilityMode`, `NativeNavigationTabRole`, `NativeNavigationTabbarShape`.
+- Transitions & Geometry: `NativeNavigationBeginTransitionOptions`, `NativeNavigationFinishTransitionOptions`, `NativeNavigationTransitionResult`, `NativeNavigationTransitionDirection`, `NativeNavigationRect`, `NativeNavigationRectTarget`.
+- Events & Handlers: `NativeNavigationBackEvent`, `NativeNavigationBarItemTapEvent`, `NativeNavigationTabSelectEvent`, `NativeNavigationTransitionEvent`.
 - Plugin Interface: `NativeNavigationPlugin`, `PluginVersionResult`.
 
 ## Platform behavior
 
 - **iOS 26+** uses the system Liquid Glass `UITabBarController` for floating tab
-  bars, and `UIGlassEffect` for the custom capsule. On the system Liquid Glass
-  tab bar path, the plugin excludes the system-owned bottom safe area from the
-  reported bottom inset to prevent duplicate spacing. Custom capsules and earlier
-  iOS paths retain the existing safe-area-inclusive calculation. iOS 15–25 fall
-  back to `UIBlurEffect` materials — the whole Liquid Glass path is behind runtime
+  bars, and `UIGlassEffect` for the custom capsule. iOS 15–25 fall back to
+  `UIBlurEffect` materials — the whole Liquid Glass path is behind runtime
   `if #available` checks, so it compiles and runs cleanly at the iOS 15 floor.
 - **Android 12+** renders the `liquidGlass` effect with a `RenderEffect` blur of
   the WebView behind the bars. Android 11 uses a translucent surface fallback.
