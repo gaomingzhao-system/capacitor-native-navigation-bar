@@ -76,9 +76,7 @@ func nativeNavigationSystemTabAppearanceHasOpaqueBackground(_ appearance: UITabB
 func nativeNavigationSystemTabTransparentStandardAppearance(
     from source: UITabBarAppearance
 ) -> UITabBarAppearance {
-    guard let appearance = source.copy() as? UITabBarAppearance else {
-        return source
-    }
+    let appearance = source.copy()
     appearance.backgroundEffect = nil
     appearance.backgroundColor = .clear
     appearance.shadowColor = .clear
@@ -174,7 +172,7 @@ final class NativeNavigationSystemTabSafeAreaObserverView: UIView {
 
         let currentAppearance = tabBar.standardAppearance
         if nativeNavigationSystemTabAppearanceHasOpaqueBackground(currentAppearance) {
-            opaqueStandardAppearance = currentAppearance.copy() as? UITabBarAppearance
+            opaqueStandardAppearance = currentAppearance.copy()
         }
 
         let transparentAppearance = nativeNavigationSystemTabTransparentStandardAppearance(
