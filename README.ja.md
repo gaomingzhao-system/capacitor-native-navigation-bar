@@ -195,7 +195,7 @@ await NativeNavigation.finishTransition({ direction: "forward" })
 
 ## プラットフォームごとの動作
 
-- **iOS 26+**: フローティングタブバーにシステムの Liquid Glass `UITabBarController` を使用し、カスタムカプセルには `UIGlassEffect` を使用します。iOS 15〜25 では `UIBlurEffect` マテリアルにフォールバックします。Liquid Glass パス全体はランタイムの `if #available` チェックで保護されているため、iOS 15 フロアでも問題なくコンパイル・動作します。
+- **iOS 26+**: フローティングタブバーにシステムの Liquid Glass `UITabBarController` を使用し、カスタムカプセルには `UIGlassEffect` を使用します。システムタブバーのホスティング時には継承された下部セーフエリアのインセットを自動補正し、エッジトゥエッジにレイアウトを拡張することで、WebView がクリッピングされずにガラスの背後まで描画されます。iOS 15〜25 では `UIBlurEffect` マテリアルにフォールバックします。Liquid Glass パス全体はランタイムの `if #available` チェックで保護されているため、iOS 15 フロアでも問題なくコンパイル・動作します。
 - **Android 12+**: WebView の後ろに `RenderEffect` ブラーで `liquidGlass` エフェクトを描画します。Android 11 は半透明サーフェスにフォールバックします。
 - アイコンはインライン SVG（両プラットフォームでネイティブ描画）、SF Symbols、バンドル済み画像/drawable 名に対応しています。
 
