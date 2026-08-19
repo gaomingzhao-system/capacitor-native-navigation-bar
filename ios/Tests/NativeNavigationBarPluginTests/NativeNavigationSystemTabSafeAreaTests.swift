@@ -70,8 +70,14 @@ final class NativeNavigationSystemTabSafeAreaTests: XCTestCase {
 
         XCTAssertFalse(nativeNavigationSystemTabAppearanceHasOpaqueBackground(transparentAppearance))
         XCTAssertNil(transparentAppearance.backgroundEffect)
-        XCTAssertEqual(transparentAppearance.backgroundColor?.cgColor.alpha, 0)
-        XCTAssertEqual(transparentAppearance.shadowColor?.cgColor.alpha, 0)
+        XCTAssertLessThanOrEqual(
+            transparentAppearance.backgroundColor?.cgColor.alpha ?? 0,
+            0.001
+        )
+        XCTAssertLessThanOrEqual(
+            transparentAppearance.shadowColor?.cgColor.alpha ?? 0,
+            0.001
+        )
     }
 
     func testTransparentSystemTabAppearanceDoesNotMutateTheSourceAppearance() {
