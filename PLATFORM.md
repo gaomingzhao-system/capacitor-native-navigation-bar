@@ -1,7 +1,7 @@
 # Platform Support
 
 Platform, toolchain, runtime-safety, and release requirements for
-`capacitor-native-navigation-bar` **7.3.0**.
+`capacitor-native-navigation-bar` **7.3.1**.
 
 ## Compatibility matrix
 
@@ -49,6 +49,12 @@ misstates the app's real runtime support and must not be used for release.
 APIs newer than iOS 15 remain behind runtime availability checks. The iOS 26
 Liquid Glass paths require device-level visual validation in addition to the
 simulator tests.
+
+When hosting a WKWebView inside a system `UITabBarController` on iOS 26+, the
+content view controller enables edge-to-edge extended layout and observes safe
+area changes to compensate for the bottom safe area inset inherited from the
+system tab bar, ensuring the WebView reaches the physical bottom behind the
+Liquid Glass bar without clipping.
 
 ## Android
 
@@ -161,7 +167,7 @@ Repository setup required before the first release:
 
 - add an npm automation/access token as the `NPM_TOKEN` Actions secret
 - keep the release workflow on `main`
-- run the workflow with expected version `7.3.0` and npm tag `latest`
+- run the workflow with expected version `7.3.1` and npm tag `latest`
 
 `npm publish` also executes `prepublishOnly`, so Web/package verification is
 repeated immediately before publication.
