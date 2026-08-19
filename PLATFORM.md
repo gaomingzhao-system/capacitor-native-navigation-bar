@@ -1,7 +1,7 @@
 # Platform Support
 
 Platform, toolchain, runtime-safety, and release requirements for
-`capacitor-native-navigation-bar` **7.3.1**.
+`capacitor-native-navigation-bar` **7.3.2**.
 
 ## Compatibility matrix
 
@@ -167,7 +167,7 @@ Repository setup required before the first release:
 
 - add an npm automation/access token as the `NPM_TOKEN` Actions secret
 - keep the release workflow on `main`
-- run the workflow with expected version `7.3.1` and npm tag `latest`
+- run the workflow with expected version `7.3.2` and npm tag `latest`
 
 `npm publish` also executes `prepublishOnly`, so Web/package verification is
 repeated immediately before publication.
