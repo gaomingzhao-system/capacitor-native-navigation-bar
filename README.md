@@ -211,7 +211,9 @@ All option, event, and result types are exported from the package root and defin
 ## Platform behavior
 
 - **iOS 26+** uses the system Liquid Glass `UITabBarController` for floating tab
-  bars, and `UIGlassEffect` for the custom capsule. iOS 15–25 fall back to
+  bars, and `UIGlassEffect` for the custom capsule. System tab bar hosting automatically
+  compensates for the inherited bottom safe-area insets and extends the layout edge-to-edge
+  so the WebView renders behind the glass without clipping. iOS 15–25 fall back to
   `UIBlurEffect` materials — the whole Liquid Glass path is behind runtime
   `if #available` checks, so it compiles and runs cleanly at the iOS 15 floor.
 - **Android 12+** renders the `liquidGlass` effect with a `RenderEffect` blur of
