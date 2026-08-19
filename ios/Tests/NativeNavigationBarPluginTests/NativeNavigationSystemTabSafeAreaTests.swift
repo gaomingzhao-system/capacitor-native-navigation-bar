@@ -59,6 +59,36 @@ final class NativeNavigationSystemTabSafeAreaTests: XCTestCase {
         )
     }
 
+    func testSystemTabStandardAppearanceCanBecomeFullyTransparent() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithDefaultBackground()
+        XCTAssertTrue(nativeNavigationSystemTabAppearanceHasOpaqueBackground(appearance))
+
+        let transparentAppearance = nativeNavigationSystemTabTransparentStandardAppearance(
+            from: appearance
+        )
+
+        XCTAssertFalse(nativeNavigationSystemTabAppearanceHasOpaqueBackground(transparentAppearance))
+        XCTAssertNil(transparentAppearance.backgroundEffect)
+        XCTAssertLessThanOrEqual(
+            transparentAppearance.backgroundColor?.cgColor.alpha ?? 0,
+            0.001
+        )
+        XCTAssertLessThanOrEqual(
+            transparentAppearance.shadowColor?.cgColor.alpha ?? 0,
+            0.001
+        )
+    }
+
+    func testTransparentSystemTabAppearanceDoesNotMutateTheSourceAppearance() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithDefaultBackground()
+
+        _ = nativeNavigationSystemTabTransparentStandardAppearance(from: appearance)
+
+        XCTAssertTrue(nativeNavigationSystemTabAppearanceHasOpaqueBackground(appearance))
+    }
+
     func testSystemTabContentFrameExtendsOnlyItsBottomEdge() {
         let currentFrame = CGRect(x: 0, y: 0, width: 390, height: 761)
         let systemBounds = CGRect(x: 0, y: 0, width: 390, height: 844)
@@ -119,6 +149,15 @@ final class NativeNavigationSystemTabSafeAreaTests: XCTestCase {
         }
         XCTAssertEqual(observers.count, 1)
         XCTAssertTrue(observers[0].hostedWebView === webView)
+
+        if !UIAccessibility.isReduceTransparencyEnabled {
+            XCTAssertFalse(
+                nativeNavigationSystemTabAppearanceHasOpaqueBackground(
+                    tabController.tabBar.standardAppearance
+                )
+            )
+            XCTAssertTrue(tabController.tabBar.isTranslucent)
+        }
 
         XCTAssertTrue(contentController.host(webView: webView))
         XCTAssertEqual(

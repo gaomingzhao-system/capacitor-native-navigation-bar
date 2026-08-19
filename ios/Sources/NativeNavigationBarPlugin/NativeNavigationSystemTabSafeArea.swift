@@ -58,11 +58,37 @@ func nativeNavigationSystemTabExtendedContentFrame(
     )
 }
 
+func nativeNavigationSystemTabAppearanceHasOpaqueBackground(_ appearance: UITabBarAppearance) -> Bool {
+    if appearance.backgroundEffect != nil {
+        return true
+    }
+    if let backgroundColor = appearance.backgroundColor,
+       backgroundColor.cgColor.alpha > 0.001 {
+        return true
+    }
+    if let shadowColor = appearance.shadowColor,
+       shadowColor.cgColor.alpha > 0.001 {
+        return true
+    }
+    return false
+}
+
+func nativeNavigationSystemTabTransparentStandardAppearance(
+    from source: UITabBarAppearance
+) -> UITabBarAppearance {
+    let appearance = source.copy()
+    appearance.backgroundEffect = nil
+    appearance.backgroundColor = .clear
+    appearance.shadowColor = .clear
+    return appearance
+}
+
 @available(iOS 26.0, *)
 final class NativeNavigationSystemTabSafeAreaObserverView: UIView {
     weak var contentController: NativeNavigationTabContentController?
     weak var hostedWebView: WKWebView?
     private(set) var bottomSafeAreaCompensation: CGFloat = 0
+    private var opaqueStandardAppearance: UITabBarAppearance?
 
     override func safeAreaInsetsDidChange() {
         super.safeAreaInsetsDidChange()
@@ -79,6 +105,8 @@ final class NativeNavigationSystemTabSafeAreaObserverView: UIView {
               let tabController = contentController.tabBarController as? NativeNavigationTabController else {
             return
         }
+
+        synchronizeSystemTabBarBackground(tabController)
 
         let nextCompensation = nativeNavigationSystemTabBottomSafeAreaCompensation(
             safeAreaBottom: contentController.view.safeAreaInsets.bottom,
@@ -125,6 +153,36 @@ final class NativeNavigationSystemTabSafeAreaObserverView: UIView {
         var insets = contentController.additionalSafeAreaInsets
         insets.bottom = nextCompensation
         contentController.additionalSafeAreaInsets = insets
+    }
+
+    private func synchronizeSystemTabBarBackground(_ tabController: NativeNavigationTabController) {
+        let tabBar = tabController.tabBar
+
+        if UIAccessibility.isReduceTransparencyEnabled {
+            if let opaqueStandardAppearance {
+                tabBar.standardAppearance = opaqueStandardAppearance
+                tabBar.items?.forEach { item in
+                    item.standardAppearance = opaqueStandardAppearance
+                }
+                self.opaqueStandardAppearance = nil
+            }
+            tabBar.isTranslucent = false
+            return
+        }
+
+        let currentAppearance = tabBar.standardAppearance
+        if nativeNavigationSystemTabAppearanceHasOpaqueBackground(currentAppearance) {
+            opaqueStandardAppearance = currentAppearance.copy()
+        }
+
+        let transparentAppearance = nativeNavigationSystemTabTransparentStandardAppearance(
+            from: currentAppearance
+        )
+        tabBar.standardAppearance = transparentAppearance
+        tabBar.items?.forEach { item in
+            item.standardAppearance = transparentAppearance
+        }
+        tabBar.isTranslucent = true
     }
 }
 
